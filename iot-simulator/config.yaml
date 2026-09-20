@@ -1,0 +1,25 @@
+# 与 backend seed_demo 配合：先在后端创建设备，再填写 branch_id / device_id
+# 查询命令见 README.md
+
+mqtt:
+  host: localhost
+  port: 1883
+  username: ""
+  password: ""
+
+devices:
+  gate:
+    branch_id: 1
+    device_id: 1
+    name: 模拟门禁
+  smoke:
+    branch_id: 1
+    device_id: 2
+    name: 模拟烟感
+  rfid:
+    branch_id: 1
+    device_id: 3
+    name: 模拟RFID通道
+
+simulation:
+  heartbeat_interval_seconds: 30
