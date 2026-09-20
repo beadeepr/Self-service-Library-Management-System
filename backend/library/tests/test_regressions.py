@@ -74,6 +74,7 @@ class RegressionTests(TestCase):
         serializer.is_valid(raise_exception=True)
         view = WorkOrderViewSet()
         view.request = SimpleNamespace(user=self.admin)
+        view.format_kwarg = None
         return work, serializer, view
 
     def test_edit_cannot_revert_concurrently_completed_workorder(self):

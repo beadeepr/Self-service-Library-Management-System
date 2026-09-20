@@ -122,7 +122,7 @@
 }
 ```
 
-返回记录使用 `kind=return`、`loan`、`branch`。同一上传账号重试必须保持 event_id 和内容不变。借阅与归还时间采用 occurred_at；补传仍重新检查服务器库存/资格，不覆盖冲突记录。离线归还早于已经计费日期时返回复核冲突，管理员先调整罚款再重传。浏览器或终端的离线本地队列、离线身份授权凭证属于客户端部分，本后端提供补传与冲突处理接口。
+返回记录使用 `kind=return`、`loan`、`branch`。event_id 是全局唯一的交易 UUID，重试必须保持事件 ID 和内容不变；更换上传管理员后仍返回原处理结果，不重新借还。相同事件 ID 携带不同内容会返回 conflict。借阅与归还时间采用 occurred_at；补传仍重新检查服务器库存/资格，不覆盖冲突记录。离线归还早于已经计费日期时返回复核冲突，管理员先调整罚款再重传。浏览器或终端的离线本地队列、离线身份授权凭证属于客户端部分，本后端提供补传与冲突处理接口。
 
 ## 消息、统计、集成和扩展
 
@@ -208,3 +208,5 @@ Content-Type: application/json
 幂等结果保留至 financial_retention_days，超过保留期不保证旧请求键仍可重放。借还成功会在同一事务保存领域事件 outbox，并产生站内通知；Celery 将事件按 QoS 1 发布到 `library/{siteId}/domain/event`，接收方按 event_id 去重。MQTT 故障保留待发布事件，不回滚已提交借还。
 
 设备命令发布到 `library/{siteId}/device/{deviceId}/command`，签名为 `HMAC-SHA256(DEVICE_SIGNING_KEY, command_id|device_id|command|timestamp|reason)`。接入设备必须验证签名、命令时间窗并持久化已执行 command_id 防重放；模拟环境只记录和发布带 simulation=true 的命令，不声称真实设备已执行。
+
+MQTT 订阅使用固定客户端 ID、持久会话和手动确认。QoS 1 消息先写入 MqttInbox，数据库提交后才确认接收；业务处理失败保留 pending 状态，由 Celery 重试。收件本身写入失败则不确认，并重连等待 broker 重发；无法解析的消息保存为 rejected，避免无效消息持续阻塞处理。管理员可在 Django Admin 只读检查收件状态及错误。收件去重使用主题和原始载荷的摘要，领域事件仍按 event_id 去重。

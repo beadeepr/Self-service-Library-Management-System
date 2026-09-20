@@ -92,6 +92,8 @@ backup 服务启动后及每隔 24 小时执行一次事务一致的 MySQL 逻�
 
 Celery Beat 每分钟检查预约过期、逾期计费、即将到期提醒及设备离线，每日清理保留期限已到的数据。一天内重复扫描不会重复累计同一天的罚款、信用扣减或同类提醒。运行 `worker` 和 `beat` 才会自动调度；Windows 本机建议通过 Docker 运行 Celery。
 
+MQTT 收件先持久化再确认，业务处理失败由 Beat 每 5 秒调度重试，每批最多 100 条；`run_maintenance` 也会重试待处理收件。收件持久化失败时订阅端保持消息未确认并重连，依靠 broker 的持久会话重发。请使用 QoS 1，保持桥接客户端 ID 唯一且稳定。此机制不能保证 QoS 0 的断线重发。
+
 MQTT 事件主题为 `library/{siteId}/device/{deviceId}/event`，同时支持同前缀的 telemetry 和 status：
 
 ```json
@@ -121,7 +123,9 @@ docker compose exec api python manage.py simulate_device --device 1 --kind heart
 
 当前验证环境为 Windows / Python 3.14 / SQLite。Docker 服务、真实 MySQL 并发、MQTT broker 实连和需求中的 500 并发/99.9% 可用性需要在相应部署环境另行验收，不能从 SQLite 单元测试推断已达标。
 
-本次实现已验证：41 项自动化测试通过；迁移一致性检查与 OpenAPI 严格校验通过；实际 HTTP 完成手机号登录 → 检索副本 → 借书 → 跨角色消毒/上架的归还闭环，健康探针返回 ready。
+自动化测试包含原有业务流程，以及资料/工单并发交错、离线跨账号去重、MQTT 持久化确认和失败重试、节假日本地时区等回归场景。此前实际 HTTP 已完成手机号登录 → 检索副本 → 借书 → 跨角色消毒/上架的归还闭环。
+
+升级时先暂停 API、worker、beat 和 MQTT 桥接进程，再执行 `manage.py migrate`。迁移 0008/0009 新增收件箱和离线交易回执，并将旧的离线幂等结果迁入全局回执；若同一个历史事件 ID 已产生不同交易结果，迁移会报告冲突并停止，需先核对历史记录，不能直接忽略冲突。升级完成后重启服务，避免新旧进程同时写入两套离线去重表。
 
 `/health/` 为存活探针，`/health/ready/` 检查数据库与缓存。设备在线状态由心跳/超时监测提供，不通过公开健康检查泄露设备详情。
 
