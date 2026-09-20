@@ -34,5 +34,6 @@ for model in [models.Branch, models.Category, models.Book, models.Copy, models.R
     models.Loan, models.Reservation, models.Fine, models.Payment, models.CreditEntry, models.DepositEntry,
     models.Device, models.DeviceEvent, models.DeviceCommand, models.Alert, models.Visit,
     models.Transfer, models.WorkOrder, models.Inventory, models.OperationRecord,
-    models.Activity, models.Enrollment, models.AuditLog, models.Consent, models.Notification]:
+    models.Activity, models.Enrollment, models.AuditLog, models.Consent, models.Notification,
+    models.MqttInbox, models.OfflineReceipt]:
     admin.site.register(model, ReadOnlyAdmin)

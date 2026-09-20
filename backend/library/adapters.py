@@ -5,8 +5,9 @@ import uuid
 from paho.mqtt.client import Client, CallbackAPIVersion
 
 
-def mqtt_client(client_id):
-    client = Client(CallbackAPIVersion.VERSION2, client_id=client_id)
+def mqtt_client(client_id, *, persistent=False, manual_ack=False):
+    client = Client(CallbackAPIVersion.VERSION2, client_id=client_id,
+                    clean_session=not persistent, manual_ack=manual_ack)
     if os.getenv('MQTT_USERNAME'):
         client.username_pw_set(os.environ['MQTT_USERNAME'], os.environ['MQTT_PASSWORD'])
     if os.getenv('MQTT_TLS', '0') == '1':

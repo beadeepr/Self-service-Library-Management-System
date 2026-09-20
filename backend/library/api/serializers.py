@@ -5,6 +5,15 @@ from library.services.authentication import validate_secret
 
 
 class UserSerializer(serializers.ModelSerializer):
+    def update(self, instance, validated_data):
+        fields = ['first_name', 'avatar', 'contact']
+        changes = {key: value for key, value in validated_data.items() if key in fields}
+        for key, value in changes.items():
+            setattr(instance, key, value)
+        if changes:
+            instance.save(update_fields=list(changes))
+        return instance
+
     credit_level = serializers.SerializerMethodField()
 
     def get_credit_level(self, obj) -> str:

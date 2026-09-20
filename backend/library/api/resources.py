@@ -7,6 +7,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, viewsets, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from library import models as m
 from library.services import authentication, circulation
 from library.services.common import audit, idempotent, is_admin, require, rules
@@ -120,12 +121,17 @@ class ReaderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.G
 
     @action(detail=False, methods=['get', 'patch'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
+        reader = request.user
         if request.method == 'PATCH':
-            serializer = self.get_serializer(request.user, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            audit(request.user, 'reader.profile', request.user)
-        return Response(self.get_serializer(request.user).data)
+            with transaction.atomic():
+                reader = get_object_or_404(m.User.objects.select_for_update(), pk=request.user.pk)
+                if not reader.is_active or reader.frozen:
+                    raise PermissionDenied('账户已冻结或停用，无法修改资料')
+                serializer = self.get_serializer(reader, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                serializer.save()
+                audit(request.user, 'reader.profile', reader)
+        return Response(self.get_serializer(reader).data)
 
     @extend_schema(request=s.PasswordSerializer)
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])

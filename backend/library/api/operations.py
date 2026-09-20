@@ -9,7 +9,7 @@ from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from library import models as m
 from library.services import operations as service, circulation
-from library.services.common import audit, idempotent, is_admin, require
+from library.services.common import audit, idempotent, offline_idempotent, is_admin, require
 from . import serializers as s
 from .auth import validated
 from .common import AdminOnly, StaffOnly, OperatorOnly
@@ -128,8 +128,15 @@ class WorkOrderViewSet(AuditedModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
 
     def perform_update(self, serializer):
-        require(serializer.instance.status in ['open', 'in_progress'], '已完成工单不可修改基本信息')
-        super().perform_update(serializer)
+        with transaction.atomic():
+            latest = get_object_or_404(m.WorkOrder.objects.select_for_update(), pk=serializer.instance.pk)
+            require(latest.status in ['open', 'in_progress'], '已完成工单不可修改基本信息')
+            checked = self.get_serializer(latest, data=serializer.initial_data,
+                partial=serializer.partial, context=serializer.context)
+            checked.is_valid(raise_exception=True)
+            item = checked.save()
+            serializer.instance = item
+            audit(self.request.user, 'resource.update', item)
 
     @extend_schema(request=s.WorkTransitionSerializer)
     @action(detail=True, methods=['post'])
@@ -191,7 +198,7 @@ class OfflineViewSet(viewsets.GenericViewSet):
                         result = circulation.return_book(request.user, item['loan'], item['branch'], occurred_at=item['occurred_at'])
                     audit(request.user, 'offline.reconcile', request.user, event_id=str(item['event_id']), occurred_at=item['occurred_at'].isoformat())
                     return result
-                result = idempotent(request.user, f'offline:{item["event_id"]}', 'offline.sync', item, execute)
+                result = offline_idempotent(request.user, item['event_id'], item, execute)
                 results.append({'event_id': item['event_id'], 'status': 'applied', 'result': result})
             except (APIException, Http404) as exc:
                 results.append({'event_id': item['event_id'], 'status': 'conflict', 'detail': getattr(exc, 'detail', str(exc))})

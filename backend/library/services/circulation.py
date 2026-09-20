@@ -11,7 +11,7 @@ from library.events import emit
 
 
 def shift_holidays(value, rule):
-    while value.date().isoformat() in rule.holidays:
+    while timezone.localdate(value).isoformat() in rule.holidays:
         value += timedelta(days=1)
     return value
 

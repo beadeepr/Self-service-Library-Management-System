@@ -1,11 +1,9 @@
-import json
 import logging
+import time
 from django.core.management.base import BaseCommand
-from django.db import close_old_connections
+from django.db import close_old_connections, DatabaseError
 from library.adapters import mqtt_client, connect
-from library.api.serializers import DeviceEventInputSerializer
-from library.services.operations import ingest
-from library.models import Device
+from library.services.mqtt import record_message, process_message
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +12,7 @@ class Command(BaseCommand):
     help = '订阅 library/+/device/+/event，将 MQTT 仿真事件转入领域服务'
 
     def handle(self, *args, **options):
-        client = mqtt_client('library-backend-bridge')
+        client = mqtt_client('library-backend-bridge', persistent=True, manual_ack=True)
 
         def on_connect(client, userdata, flags, reason_code, properties):
             if reason_code.is_failure:
@@ -26,29 +24,29 @@ class Command(BaseCommand):
         def on_message(client, userdata, message):
             close_old_connections()
             try:
-                if len(message.payload) > 65536:
-                    raise ValueError('MQTT 消息过大')
-                parts = message.topic.split('/')
-                branch_id, device_id, topic_kind = int(parts[1]), int(parts[3]), parts[4]
-                if not Device.objects.filter(pk=device_id, branch_id=branch_id).exists():
-                    raise ValueError('设备与 MQTT 网点主题不匹配')
-                envelope = json.loads(message.payload)
-                if topic_kind != 'event':
-                    envelope['kind'] = 'telemetry' if topic_kind == 'telemetry' else 'heartbeat'
-                serializer = DeviceEventInputSerializer(data=envelope)
-                serializer.is_valid(raise_exception=True)
-                data = serializer.validated_data
-                ingest(None, device_id, data['event_id'], data['kind'], data['payload'])
-            except Exception:
-                logger.exception('MQTT 事件处理失败：%s', message.topic)
+                # record_message commits its transaction before ACK. A failed commit
+                # propagates out of the callback and reconnects the persistent session.
+                row = record_message(message.topic, message.payload)
+                client.ack(message.mid, message.qos)
+                try:
+                    process_message(row.pk)
+                except Exception:
+                    logger.exception('MQTT 消息已持久化，等待后台重试：%s', row.pk)
             finally:
                 close_old_connections()
 
         client.on_connect = on_connect
         client.on_message = on_message
-        connect(client)
-        self.stdout.write('MQTT bridge started')
         try:
-            client.loop_forever()
+            while True:
+                try:
+                    connect(client)
+                    self.stdout.write('MQTT bridge started')
+                    client.loop_forever()
+                except (DatabaseError, OSError):
+                    logger.exception('MQTT 连接或收件持久化失败，稍后重连；未落库消息不确认')
+                finally:
+                    client.disconnect()
+                time.sleep(5)
         except KeyboardInterrupt:
             client.disconnect()

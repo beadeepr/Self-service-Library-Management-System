@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 from library.models import (Book, Copy, Device, Loan, Reservation, User, Visit,
     DeviceEvent, Notification, OperationRecord, VerificationCode, LoginChallenge,
-    Fine, Payment, CreditEntry, DepositEntry, AuditLog, Idempotency)
+    Fine, Payment, CreditEntry, DepositEntry, AuditLog, Idempotency, OfflineReceipt, MqttInbox)
 from library.services.common import rules
 from library.services.circulation import assess_fine, assign_hold, notify
 from library.services.operations import raise_alert
@@ -54,6 +54,7 @@ def purge_expired():
         counts[model.__name__] = model.objects.filter(created_at__lt=cutoff).delete()[0]
     counts['visits'] = Visit.objects.filter(exited_at__lt=cutoff).delete()[0]
     counts['videos'] = OperationRecord.objects.filter(kind='video', expires_at__lte=now).delete()[0]
+    counts['mqtt_inbox'] = MqttInbox.objects.exclude(status='pending').filter(updated_at__lt=cutoff).delete()[0]
     VerificationCode.objects.filter(expires_at__lt=now).delete()
     LoginChallenge.objects.filter(expires_at__lt=now).delete()
     CreditEntry.objects.filter(created_at__lt=cutoff).delete()
@@ -74,7 +75,22 @@ def purge_expired():
         AuditLog.objects.filter(created_at__lt=financial_cutoff).delete()
         DepositEntry.objects.filter(created_at__lt=financial_cutoff).delete()
         Idempotency.objects.filter(created_at__lt=financial_cutoff).delete()
+        OfflineReceipt.objects.filter(created_at__lt=financial_cutoff).delete()
     return counts
+
+
+@shared_task
+def process_mqtt_inbox():
+    import logging
+    from library.services.mqtt import process_message
+    completed = 0
+    for pk in list(MqttInbox.objects.filter(status='pending').order_by('id').values_list('pk', flat=True)[:100]):
+        try:
+            process_message(pk)
+            completed += 1
+        except Exception:
+            logging.getLogger(__name__).exception('MQTT 收件 %s 处理失败，保留待重试', pk)
+    return completed
 
 
 @shared_task
