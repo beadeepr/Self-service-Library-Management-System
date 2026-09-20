@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Q
+from .fields import EncryptedCharField
 
 
 class Record(models.Model):
@@ -16,14 +17,16 @@ class Record(models.Model):
 
 
 class User(AbstractUser):
+    REQUIRED_FIELDS = ['phone']
     class Role(models.TextChoices):
         READER = 'reader', '读者'
         ADMIN = 'admin', '管理员'
         OPERATOR = 'operator', '运维'
-    phone = models.CharField(max_length=11, unique=True, validators=[RegexValidator(r'^1\d{10}$', '手机号格式错误')])
+    phone = EncryptedCharField(max_length=11, unique=True, validators=[RegexValidator(r'^1\d{10}$', '手机号格式错误')])
+    first_name = EncryptedCharField(max_length=150, blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.READER)
     avatar = models.URLField(blank=True)
-    contact = models.CharField(max_length=200, blank=True)
+    contact = EncryptedCharField(max_length=200, blank=True)
     verified = models.BooleanField(default=False)
     identity_digest = models.CharField(max_length=64, unique=True, null=True, blank=True)
     credit = models.PositiveIntegerField(default=100, validators=[MaxValueValidator(200)])
@@ -34,11 +37,19 @@ class User(AbstractUser):
 
 
 class VerificationCode(Record):
-    phone = models.CharField(max_length=11)
+    phone = EncryptedCharField(max_length=11)
     purpose = models.CharField(max_length=20, choices=[(v, v) for v in ['register', 'login', 'phone']])
     digest = models.CharField(max_length=128)
     expires_at = models.DateTimeField()
     attempts = models.PositiveIntegerField(default=0)
+    consumed = models.BooleanField(default=False)
+
+
+class LoginChallenge(Record):
+    token = models.UUIDField(default=uuid.uuid4, unique=True)
+    poll_digest = models.CharField(max_length=64)
+    reader = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    expires_at = models.DateTimeField()
     consumed = models.BooleanField(default=False)
 
 
@@ -110,6 +121,7 @@ class Rule(Record):
     offline_minutes = models.PositiveIntegerField(default=5, validators=[MinValueValidator(1)])
     response_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1)])
     retention_days = models.PositiveIntegerField(default=180, validators=[MinValueValidator(1)])
+    financial_retention_days = models.PositiveIntegerField(default=1825, validators=[MinValueValidator(1)])
     holidays = models.JSONField(default=list, blank=True)
 
 
@@ -122,6 +134,9 @@ class Loan(Record):
     renewals = models.PositiveIntegerField(default=0)
     # Portable to MySQL: a nullable unique key enforces one live loan per copy.
     active_copy = models.OneToOneField(Copy, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+
+    class Meta(Record.Meta):
+        indexes = [models.Index(fields=['reader', 'returned_at'], name='loan_reader_returned_idx')]
 
 
 class Reservation(Record):
@@ -153,6 +168,13 @@ class CreditEntry(Record):
     reader = models.ForeignKey(User, on_delete=models.PROTECT)
     delta = models.IntegerField()
     balance = models.PositiveIntegerField()
+    reason = models.CharField(max_length=255)
+
+
+class DepositEntry(Record):
+    reader = models.ForeignKey(User, on_delete=models.PROTECT)
+    delta = models.DecimalField(max_digits=10, decimal_places=2)
+    balance = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255)
 
 
@@ -195,10 +217,11 @@ class DeviceEvent(Record):
 
 class DeviceCommand(Record):
     device = models.ForeignKey(Device, on_delete=models.PROTECT)
-    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    actor = models.ForeignKey(User, null=True, on_delete=models.PROTECT)
     command = models.CharField(max_length=30)
     reason = models.CharField(max_length=255)
     status = models.CharField(max_length=20, default='pending')
+    signature = models.CharField(max_length=64, blank=True)
 
 
 class Alert(Record):
@@ -217,6 +240,9 @@ class Visit(Record):
     entered_at = models.DateTimeField()
     exited_at = models.DateTimeField(null=True, blank=True)
     active_reader = models.OneToOneField(User, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+
+    class Meta(Record.Meta):
+        indexes = [models.Index(fields=['branch', 'entered_at'], name='visit_branch_entered_idx')]
 
 
 class Transfer(Record):
@@ -293,3 +319,10 @@ class Idempotency(Record):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['actor', 'key'], name='unique_idempotency_key')]
+
+
+class DomainEvent(Record):
+    event_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    kind = models.CharField(max_length=60)
+    payload = models.JSONField(default=dict)
+    published_at = models.DateTimeField(null=True, blank=True)

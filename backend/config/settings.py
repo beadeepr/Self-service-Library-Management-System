@@ -49,7 +49,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
+    'DEFAULT_RENDERER_CLASSES': ['library.api.renderers.EnvelopeJSONRenderer'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['library.api.authentication.LibraryJWTAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination', 'PAGE_SIZE': 20,
@@ -64,12 +65,20 @@ SIMPLE_JWT = {'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30), 'REFRESH_TOKEN_LIF
               'CHECK_REVOKE_TOKEN': True}
 SPECTACULAR_SETTINGS = {'TITLE': '无人值守图书馆 API', 'VERSION': '1.0.0',
                        'DESCRIPTION': 'JWT 鉴权；角色 reader/admin/operator；外部服务默认模拟。',
-                       'COMPONENT_SPLIT_REQUEST': True}
+                       'COMPONENT_SPLIT_REQUEST': True,
+                       'POSTPROCESSING_HOOKS': ['drf_spectacular.hooks.postprocess_schema_enums', 'library.api.renderers.envelope_schema']}
+PASSWORD_HASHERS = ['django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+                    'django.contrib.auth.hashers.PBKDF2PasswordHasher']
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', SECRET_KEY)
+if not DEBUG and not os.getenv('FIELD_ENCRYPTION_KEY'):
+    raise RuntimeError('生产环境必须设置独立的 FIELD_ENCRYPTION_KEY')
+DEVICE_SIGNING_KEY = os.getenv('DEVICE_SIGNING_KEY', SECRET_KEY)
 REDIS_URL = os.getenv('REDIS_URL')
 if REDIS_URL:
     CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': REDIS_URL}}
 CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/0'
 CELERY_BEAT_SCHEDULE = {
+    'publish-domain-events': {'task': 'library.tasks.publish_events', 'schedule': 5.0},
     'maintenance': {'task': 'library.tasks.maintenance', 'schedule': 60.0},
     'privacy-retention': {'task': 'library.tasks.purge_expired', 'schedule': 86400.0},
 }

@@ -1,0 +1,105 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '127.0.0.1:8080:80'
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_data:/srv/static:ro
+    depends_on:
+      - api
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-library}
+      MYSQL_USER: ${MYSQL_USER:-library}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, "mysqladmin ping -h localhost --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  backup:
+    image: mysql:8.4
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-library}
+      MYSQL_USER: ${MYSQL_USER:-library}
+    entrypoint: [sh, /scripts/backup.sh]
+    volumes:
+      - ./deploy/backup.sh:/scripts/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      mysql:
+        condition: service_healthy
+  emqx:
+    image: emqx/emqx:5.8.8
+    ports:
+      - '127.0.0.1:1883:1883'
+    volumes:
+      - emqx_data:/opt/emqx/data
+  api:
+    build: ./backend
+    env_file: .env
+    environment: &backend_environment
+      MYSQL_HOST: mysql
+      REDIS_URL: redis://redis:6379/0
+      MQTT_HOST: emqx
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - static_data:/app/staticfiles
+  worker:
+    build: ./backend
+    env_file: .env
+    environment: *backend_environment
+    command: [celery, -A, config, worker, --loglevel=info]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  beat:
+    build: ./backend
+    env_file: .env
+    environment: *backend_environment
+    command: [celery, -A, config, beat, --loglevel=info, --schedule=/tmp/celerybeat-schedule]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  mqtt:
+    build: ./backend
+    env_file: .env
+    environment: *backend_environment
+    command: [python, manage.py, mqtt_bridge]
+    restart: on-failure
+    depends_on:
+      mysql:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+volumes:
+  mysql_data:
+  redis_data:
+  emqx_data:
+  static_data:
