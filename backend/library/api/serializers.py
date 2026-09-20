@@ -206,6 +206,14 @@ class ReturnSerializer(serializers.Serializer):
     damaged = serializers.BooleanField(default=False)
 
 
+class CirculationReturnSerializer(ReturnSerializer):
+    loan = serializers.IntegerField(min_value=1)
+
+
+class CirculationRenewSerializer(serializers.Serializer):
+    loan = serializers.IntegerField(min_value=1)
+
+
 class ReserveSerializer(serializers.Serializer):
     book = serializers.IntegerField(min_value=1)
     branch = serializers.IntegerField(min_value=1)

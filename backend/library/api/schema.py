@@ -31,6 +31,8 @@ actions(AuthViewSet, {
     'qr_confirm': (s.QrConfirmSerializer, False), 'qr_poll': (s.QrPollSerializer, False),
 })
 actions(BookViewSet, {'intake': (s.IntakeSerializer, True)})
+extend_schema_view(search=extend_schema(parameters=[OpenApiParameter('q', str)],
+    responses=s.BookSerializer(many=True)))(BookViewSet)
 actions(BranchViewSet, {'occupancy': (None, False)})
 actions(CopyViewSet, {'disinfect': (s.EmptySerializer, False), 'shelve': (s.ShelfSerializer, False), 'set_status': (s.CopyStatusSerializer, False)})
 actions(ReaderViewSet, {'password': (s.PasswordSerializer, False), 'phone': (s.SmsLoginSerializer, False),
@@ -38,6 +40,9 @@ actions(ReaderViewSet, {'password': (s.PasswordSerializer, False), 'phone': (s.S
 actions(ActivityViewSet, {'enroll': (s.EmptySerializer, False)})
 actions(LoanViewSet, {'borrow': (s.BorrowSerializer, True), 'return_book': (s.ReturnSerializer, True),
     'renew': (s.EmptySerializer, True), 'remind': (s.EmptySerializer, False)})
+for method, body in [('return_by_id', s.CirculationReturnSerializer), ('renew_by_id', s.CirculationRenewSerializer)]:
+    setattr(LoanViewSet, method, extend_schema(request=body, responses=OpenApiTypes.OBJECT,
+        parameters=[KEY])(getattr(LoanViewSet, method)))
 actions(ReservationViewSet, {'create': (s.ReserveSerializer, True), 'cancel': (s.EmptySerializer, True), 'collect': (s.EmptySerializer, True)})
 actions(PaymentViewSet, {'create': (s.FinePaymentSerializer, True), 'simulate': (s.EmptySerializer, False),
     'offline': (s.EmptySerializer, False), 'callback': (s.CallbackSerializer, False)})

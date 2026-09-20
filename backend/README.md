@@ -134,3 +134,6 @@ docker compose exec api python manage.py simulate_device --device 1 --kind heart
 项目内需求文档与架构设计决定业务范围。事务边界和 API 权限设计参考 [Django 事务文档](https://docs.djangoproject.com/en/5.2/topics/db/transactions/) 与 [DRF 权限文档](https://www.django-rest-framework.org/api-guide/permissions/)。
 
 字段加密使用 [Cryptography 的 AES-SIV 实现](https://cryptography.io/en/49.0.0/hazmat/primitives/aead/)，确定性加密仅用于需精确匹配的字段，会暴露相等关系，不支持密文模糊检索。密钥独立于数据库保存。
+# 分工与核心接口入口
+
+王恒负责的核心 API、服务文件及新增联调路径见 [接口分工说明](../docs/api/README.md)。可直接导入 [Postman 集合](../docs/api/postman_collection.json)，原 `/api/v1/` 接口继续可用。
