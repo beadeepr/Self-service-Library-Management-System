@@ -51,11 +51,30 @@ python iot-simulator/simulator.py
 python iot-simulator/simulator.py --demo
 ```
 
-### 4. 验证后端收到事件
+### 4. 验证
 
-- 确保 `docker compose` 中 `mqtt` 服务（`mqtt_bridge`）在运行
-- 管理后台或 API：`GET /api/v1/device-events/`
-- 烟感事件应触发告警 + 门禁 `unlock` 命令（可在模拟器控制台看到订阅消息）
+**无 Docker / 无 EMQX 时**（本地快速自检）：
+
+```powershell
+python iot-simulator/verify_backend.py
+```
+
+**有 EMQX 时**：
+
+```powershell
+python iot-simulator/verify_mqtt.py
+python iot-simulator/run_demo.py
+```
+
+- 确保 `mqtt` 服务（`mqtt_bridge`）在运行
+- API：`GET /api/v1/device-events/`、`GET /api/v1/alerts/`
+- 烟感会触发告警 + 门禁 `unlock`（模拟器订阅 `command` 主题可见）
+
+**答辩一键脚本**（需 Docker Desktop 运行）：
+
+```powershell
+.\iot-simulator\demo.ps1
+```
 
 ## 与后端命令对比
 
