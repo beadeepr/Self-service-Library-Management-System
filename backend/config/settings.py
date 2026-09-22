@@ -2,6 +2,16 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+# Local development defaults; explicit environment variables take precedence.
+try:
+    from .local_settings import LOCAL_ENV
+except ModuleNotFoundError as exc:
+    if exc.name != f'{__package__}.local_settings':
+        raise
+else:
+    for name, value in LOCAL_ENV.items():
+        os.environ.setdefault(name, value)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'development-only-change-before-deploying-library-key')

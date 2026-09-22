@@ -9,7 +9,7 @@ services:
     depends_on:
       - api
   mysql:
-    image: mysql:8.4
+    image: mysql:9.7.1
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-library}
       MYSQL_USER: ${MYSQL_USER:-library}
@@ -33,7 +33,7 @@ services:
       timeout: 3s
       retries: 10
   backup:
-    image: mysql:8.4
+    image: mysql:9.7.1
     env_file: .env
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-library}

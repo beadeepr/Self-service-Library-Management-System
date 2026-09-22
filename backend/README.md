@@ -82,6 +82,8 @@ backup 服务启动后及每隔 24 小时执行一次事务一致的 MySQL 逻�
 
 `.env` 由 Docker Compose 加载；本地直接运行时使用 PowerShell `$env:变量名='值'` 设置环境变量，不会自动加载 `.env`。
 
+本地也可在 `backend/config/local_settings.py` 中定义 `LOCAL_ENV` 字典，填写上述环境变量的字符串值。Django 启动时自动加载，终端中已设置的环境变量优先。此文件已被 Git 忽略，用于保存本机数据库连接信息，不会随代码同步。
+
 ## 4. 定时任务与设备模拟
 
 不运行 Celery 时，可手动执行一次维护：
