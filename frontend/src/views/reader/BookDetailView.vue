@@ -10,17 +10,28 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { COPY_STATUS_LABEL, fetchBook, searchCopies, type Book, type Copy } from '@/api/books'
-import { errorMessage } from '@/api/client'
+import { errorMessage, newIdempotencyKey } from '@/api/client'
+import { createReservation } from '@/api/reservations'
+import { useAuthStore } from '@/stores/auth'
 import { useCatalog } from '@/composables/useCatalog'
 import { formatMoney } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const { branchName, categoryName, ensureLoaded } = useCatalog()
 
 const book = ref<Book | null>(null)
 const copies = ref<Copy[]>([])
 const loading = ref(false)
+
+/* ---------- 预约 ---------- */
+
+const reserveVisible = ref(false)
+const reserveBranch = ref<number | null>(null)
+const reserving = ref(false)
+/** 幂等：键在打开预约弹窗时生成，失败重试复用，成功后清空。 */
+const reserveKey = ref('')
 
 interface BranchGroup {
   branch: number
@@ -49,12 +60,56 @@ const groups = computed<BranchGroup[]>(() => {
     .sort((left, right) => right.available - left.available || left.name.localeCompare(right.name))
 })
 
+/**
+ * 可预约的取书网点：只列「持有该书副本、但当前一本都不可借」的网点，
+ * 因为后端就是按选定取书馆的借出/可借情况判定能否预约的，
+ * 把没有副本或还有可借副本的网点列出来只会让读者点了被拒。
+ */
+const reservableBranches = computed(() => groups.value.filter((group) => group.total > 0 && group.available === 0))
+
+/** 后端给出的 can_reserve 已经综合了在架与库存，前端只补登录态判断。 */
+const canReserve = computed(() => !!book.value?.can_reserve && reservableBranches.value.length > 0)
+
 const reserveHint = computed(() => {
   if (!book.value) return ''
-  if (!book.value.active) return '该图书已下架'
+  if (!book.value.active) return '该图书已下架，不可预约'
   if (book.value.available_count > 0) return '当前有可借副本，无需预约'
-  return '预约功能将在阶段 5 接入'
+  if (!reservableBranches.value.length) return '该书副本正在处理中，暂不可预约'
+  if (!auth.isAuthenticated) return '登录后可预约'
+  return ''
 })
+
+function openReserve(): void {
+  if (!auth.isAuthenticated) {
+    ElMessage.warning('请先登录后再预约')
+    void router.push({ name: 'reader-login', query: { redirect: route.fullPath } })
+    return
+  }
+  // 默认选第一个可预约网点，通常就是唯一持有的那个馆。
+  reserveBranch.value = reservableBranches.value[0]?.branch ?? null
+  reserveKey.value = newIdempotencyKey()
+  reserveVisible.value = true
+}
+
+async function submitReserve(): Promise<void> {
+  if (!book.value || !reserveBranch.value) {
+    ElMessage.warning('请选择取书网点')
+    return
+  }
+  reserving.value = true
+  try {
+    await createReservation(book.value.id, reserveBranch.value, reserveKey.value)
+    reserveKey.value = ''
+    reserveVisible.value = false
+    ElMessage.success('预约成功，等有副本归还并上架后会发到馆通知')
+    await router.push({ name: 'reader-reservations' })
+  } catch (error) {
+    // 失败保留幂等键，重试不会重复预约。
+    ElMessage.error(errorMessage(error, '预约失败'))
+  } finally {
+    reserving.value = false
+  }
+}
 
 async function load(id: string): Promise<void> {
   loading.value = true
@@ -129,16 +184,50 @@ function statusTagType(status: Copy['status']): 'success' | 'info' | 'warning' |
           </el-descriptions>
 
           <div class="detail__actions">
-            <el-tooltip :content="reserveHint" placement="top">
+            <el-tooltip :content="reserveHint" :disabled="!reserveHint" placement="top">
               <span>
-                <el-button :disabled="true">预约</el-button>
+                <el-button :disabled="!canReserve" @click="openReserve">预约</el-button>
               </span>
             </el-tooltip>
             <el-button type="primary" @click="router.push({ name: 'reader-search' })">继续检索</el-button>
+            <el-button
+              v-if="auth.isAuthenticated"
+              text
+              type="primary"
+              @click="router.push({ name: 'reader-reservations' })"
+            >
+              我的预约
+            </el-button>
           </div>
         </div>
       </div>
     </el-card>
+
+    <!-- 预约取书网点 -->
+    <el-dialog v-model="reserveVisible" title="预约图书" width="480px">
+      <p class="reserve-book">{{ book?.title }}</p>
+      <el-form label-width="90px">
+        <el-form-item label="取书网点" required>
+          <el-select v-model="reserveBranch" class="reserve-select" placeholder="选择取书网点">
+            <el-option
+              v-for="group in reservableBranches"
+              :key="group.branch"
+              :label="`${group.name}（${group.total} 册均在借）`"
+              :value="group.branch"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <el-alert
+        type="info"
+        :closable="false"
+        title="预约后需等该网点有副本归还并消毒上架，才会分配给你并发送到馆通知；到馆后请在保留期内取书。"
+      />
+      <template #footer>
+        <el-button @click="reserveVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reserving" @click="submitReserve">确认预约</el-button>
+      </template>
+    </el-dialog>
 
     <el-card v-if="book" shadow="never">
       <template #header>馆藏位置（{{ copies.length }} 册）</template>
@@ -223,5 +312,15 @@ function statusTagType(status: Copy['status']): 'success' | 'info' | 'warning' |
   display: inline-flex;
   gap: 8px;
   font-weight: 600;
+}
+
+.reserve-book {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.reserve-select {
+  width: 100%;
 }
 </style>
