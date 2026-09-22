@@ -1,0 +1,426 @@
+{
+  "info": {
+    "name": "无人值守图书馆 · 王恒后端核心接口",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "使用前填写变量。幂等键首次自动生成，重试保留；开始新交易前清空对应 key。离线 occurred_at 必须手动填写实际发生时间，并随 event_id 一起保持不变。"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "captcha_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "captcha_answer",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sms_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "access",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "keyword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "copy_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "loan_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "branch_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reader_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "offline_copy_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "occurred_at",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "borrow_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "renew_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "return_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "offline_event_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "获取图形验证码（查看返回的 image）",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/v1/auth/captcha/",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"captcha_id\", pm.response.json().data.captcha_id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "发送注册验证码（模拟环境返回 simulation_code）",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/auth/sms-code/",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"purpose\": \"register\",\n  \"captcha_id\": \"{{captcha_id}}\",\n  \"captcha_answer\": \"{{captcha_answer}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const d = pm.response.json().data; if (d.simulation_code) pm.collectionVariables.set(\"sms_code\", d.simulation_code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "注册",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/auth/register/",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\",\n  \"code\": \"{{sms_code}}\",\n  \"first_name\": \"读者\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "登录（保存 access 和 refresh）",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/auth/login/",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const d = pm.response.json().data;",
+              "if (d.access) pm.collectionVariables.set(\"access\", d.access);",
+              "if (d.refresh) pm.collectionVariables.set(\"refresh\", d.refresh);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "刷新令牌",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/auth/refresh/",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refresh\": \"{{refresh}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const d = pm.response.json().data;",
+              "if (d.access) pm.collectionVariables.set(\"access\", d.access);",
+              "if (d.refresh) pm.collectionVariables.set(\"refresh\", d.refresh);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "检索图书",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/books/search/?q={{keyword}}",
+        "auth": {
+          "type": "noauth"
+        }
+      }
+    },
+    {
+      "name": "当前规则",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/rules/current/"
+      }
+    },
+    {
+      "name": "借阅列表",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/circulation/loans/"
+      }
+    },
+    {
+      "name": "借书（保存 loan_id）",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{borrow_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/circulation/borrow/",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"copy\": \"{{copy_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const d = pm.response.json().data; if (pm.response.code === 201 && d.id) pm.collectionVariables.set(\"loan_id\", d.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "续借",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{renew_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/circulation/renew/",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"loan\": \"{{loan_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "归还",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{return_key}}"
+          }
+        ],
+        "url": "{{base_url}}/api/circulation/return/",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"loan\": \"{{loan_id}}\",\n  \"branch\": \"{{branch_id}}\",\n  \"damaged\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "离线补传（需管理员令牌及实际发生时间）",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/offline/sync/",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transactions\": [\n    {\n      \"event_id\": \"{{offline_event_id}}\",\n      \"kind\": \"borrow\",\n      \"reader\": \"{{reader_id}}\",\n      \"copy\": \"{{offline_copy_id}}\",\n      \"occurred_at\": \"{{occurred_at}}\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "[\"borrow_key\", \"renew_key\", \"return_key\", \"offline_event_id\"].forEach(k => {",
+          "  if (!pm.collectionVariables.get(k)) pm.collectionVariables.set(k, pm.variables.replaceIn(\"{{$guid}}\"));",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from library.models import LoginChallenge, User
-from library.services import authentication as service
+from library.services import auth_service as service
 from library.services.common import audit, require
 from . import serializers as s
 

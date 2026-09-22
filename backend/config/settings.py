@@ -78,6 +78,7 @@ if REDIS_URL:
     CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': REDIS_URL}}
 CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/0'
 CELERY_BEAT_SCHEDULE = {
+    'process-mqtt-inbox': {'task': 'library.tasks.process_mqtt_inbox', 'schedule': 5.0},
     'publish-domain-events': {'task': 'library.tasks.publish_events', 'schedule': 5.0},
     'maintenance': {'task': 'library.tasks.maintenance', 'schedule': 60.0},
     'privacy-retention': {'task': 'library.tasks.purge_expired', 'schedule': 86400.0},

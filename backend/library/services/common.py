@@ -3,7 +3,7 @@ import json
 from django.utils.crypto import salted_hmac
 from django.db import transaction
 from rest_framework.exceptions import ValidationError, PermissionDenied, APIException
-from library.models import AuditLog, Idempotency, Rule, User
+from library.models import AuditLog, Idempotency, OfflineReceipt, Rule, User
 
 
 def rules():
@@ -51,4 +51,19 @@ def idempotent(actor, key, operation, payload, callback):
         return existing.response
     result = callback()
     Idempotency.objects.create(actor=actor, key=key, operation=operation, digest=digest, response=result)
+    return result
+
+
+@transaction.atomic
+def offline_idempotent(actor, event_id, payload, callback):
+    digest = salted_hmac('idempotency', json.dumps(payload, sort_keys=True, default=str), algorithm='sha256').hexdigest()
+    # Unique event IDs serialize all uploaders, including simultaneous first uploads.
+    receipt, created = OfflineReceipt.objects.select_for_update().get_or_create(
+        event_id=event_id, defaults={'uploaded_by': actor, 'digest': digest})
+    if not created:
+        require(receipt.digest == digest, '离线事件 ID 已用于不同交易内容')
+        return receipt.response
+    result = callback()
+    receipt.response = result
+    receipt.save(update_fields=['response', 'updated_at'])
     return result

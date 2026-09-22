@@ -326,3 +326,19 @@ class DomainEvent(Record):
     kind = models.CharField(max_length=60)
     payload = models.JSONField(default=dict)
     published_at = models.DateTimeField(null=True, blank=True)
+
+
+class OfflineReceipt(Record):
+    event_id = models.UUIDField(unique=True)
+    uploaded_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
+    digest = models.CharField(max_length=64)
+    response = models.JSONField(default=dict)
+
+
+class MqttInbox(Record):
+    digest = models.CharField(max_length=64, unique=True)
+    topic = models.CharField(max_length=512)
+    payload = models.BinaryField()
+    status = models.CharField(max_length=16, default='pending', db_index=True,
+        choices=[('pending', '待处理'), ('processed', '已处理'), ('rejected', '无效消息')])
+    error = models.TextField(blank=True)

@@ -21,7 +21,7 @@ class EnvelopeJSONRenderer(JSONRenderer):
 
 def envelope_schema(result, generator, request, public):
     for path, operations in result.get('paths', {}).items():
-        if not path.startswith('/api/v1/'):
+        if not path.startswith('/api/') or path == '/api/schema/':
             continue
         for operation in operations.values():
             if not isinstance(operation, dict):

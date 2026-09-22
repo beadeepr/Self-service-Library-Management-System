@@ -4,6 +4,522 @@ info:
   version: 1.0.0
   description: JWT 鉴权；角色 reader/admin/operator；外部服务默认模拟。
 paths:
+  /api/auth/login/:
+    post:
+      operationId: api_auth_login_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/auth/refresh/:
+    post:
+      operationId: api_auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/TokenRefresh'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: api_auth_register_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/User'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/books/search/:
+    get:
+      operationId: api_books_search_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: author
+        schema:
+          type: string
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - in: query
+        name: isbn
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: 用于排序结果的字段。
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: 分页结果集中的页码。
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: 搜索关键词。
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/PaginatedBookList'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/circulation/borrow/:
+    post:
+      operationId: api_circulation_borrow_create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 同一用户重试必须复用此键和相同请求体；新操作使用新键，最长 128 字符。
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BorrowRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BorrowRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/circulation/loans/:
+    get:
+      operationId: api_circulation_loans_list
+      parameters:
+      - in: query
+        name: copy
+        schema:
+          type: integer
+      - in: query
+        name: due_at__gte
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: due_at__lt
+        schema:
+          type: string
+          format: date-time
+      - name: ordering
+        required: false
+        in: query
+        description: 用于排序结果的字段。
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: 分页结果集中的页码。
+        schema:
+          type: integer
+      - in: query
+        name: reader
+        schema:
+          type: integer
+      - in: query
+        name: returned_at__isnull
+        schema:
+          type: boolean
+      - name: search
+        required: false
+        in: query
+        description: 搜索关键词。
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/PaginatedLoanList'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/circulation/renew/:
+    post:
+      operationId: api_circulation_renew_create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 同一用户重试必须复用此键和相同请求体；新操作使用新键，最长 128 字符。
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CirculationRenewRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CirculationRenewRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CirculationRenewRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/circulation/return/:
+    post:
+      operationId: api_circulation_return_create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 同一用户重试必须复用此键和相同请求体；新操作使用新键，最长 128 字符。
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CirculationReturnRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CirculationReturnRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CirculationReturnRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/offline/sync/:
+    post:
+      operationId: api_offline_sync_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfflineBatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OfflineBatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OfflineBatchRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/rules/current/:
+    get:
+      operationId: api_rules_current_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/Rule'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
   /api/schema/:
     get:
       operationId: api_schema_retrieve
@@ -1664,6 +2180,75 @@ paths:
                   data:
                     type: object
                     additionalProperties: {}
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
+  /api/v1/books/search/:
+    get:
+      operationId: api_v1_books_search_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: author
+        schema:
+          type: string
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - in: query
+        name: isbn
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: 用于排序结果的字段。
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: 分页结果集中的页码。
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: 搜索关键词。
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/PaginatedBookList'
                   request_id:
                     type: string
                     format: uuid
@@ -5466,6 +6051,36 @@ paths:
                     type: string
                     format: uuid
           description: ''
+  /api/v1/rules/current/:
+    get:
+      operationId: api_v1_rules_current_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - data
+                - request_id
+                properties:
+                  code:
+                    type: integer
+                    description: 0 为成功；4001 为库存不可借；HTTP 错误使用状态码 × 100
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/Rule'
+                  request_id:
+                    type: string
+                    format: uuid
+          description: ''
   /api/v1/transfers/:
     get:
       operationId: api_v1_transfers_list
@@ -6713,6 +7328,29 @@ components:
       required:
       - code
       - name
+    CirculationRenewRequest:
+      type: object
+      properties:
+        loan:
+          type: integer
+          minimum: 1
+      required:
+      - loan
+    CirculationReturnRequest:
+      type: object
+      properties:
+        branch:
+          type: integer
+          minimum: 1
+        damaged:
+          type: boolean
+          default: false
+        loan:
+          type: integer
+          minimum: 1
+      required:
+      - branch
+      - loan
     CodeRequestPurposeEnum:
       enum:
       - register
