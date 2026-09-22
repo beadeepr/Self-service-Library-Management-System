@@ -1,0 +1,48 @@
+/*
+ * 自助终端样式：对应 FR-55 无障碍要求。
+ * 字号整体放大、按钮触控目标不小于 56px、提高前景与背景对比度。
+ * 终端为自助设备，使用者可能是老人或视障读者，因此不沿用读者端的 14px 基准。
+ */
+:root {
+  --kiosk-bg: #eef2f7;
+  --kiosk-surface: #ffffff;
+  --kiosk-border: #c7d2e0;
+  --kiosk-text: 20px;
+  --kiosk-title: 30px;
+  --kiosk-hint: 17px;
+  --kiosk-touch: 56px;
+}
+
+/* 终端内覆盖读者端的窄容器，保证操作区足够大 */
+.kiosk-shell {
+  font-size: var(--kiosk-text);
+}
+
+.kiosk-btn {
+  background: var(--lib-brand);
+  border: none;
+  border-radius: var(--lib-radius);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--kiosk-text);
+  font-weight: 600;
+  min-height: var(--kiosk-touch);
+  padding: 0 28px;
+}
+
+.kiosk-btn--ghost {
+  background: var(--kiosk-surface);
+  border: 2px solid var(--kiosk-border);
+  color: var(--lib-text);
+}
+
+.kiosk-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.kiosk-hint {
+  color: var(--lib-text-muted);
+  font-size: var(--kiosk-hint);
+}
