@@ -21,7 +21,8 @@ const allItems: AdminMenuItem[] = [
   { name: 'admin-dashboard', label: '运营大屏' },
   { name: 'admin-books', label: '图书与馆藏' },
   { name: 'admin-readers', label: '读者管理', roles: ['admin'] },
-  { name: 'admin-loans', label: '借还管理' },
+  // 后端对非管理员只返回本人借阅，且催还/代办借还均为 AdminOnly，故仅对管理员展示。
+  { name: 'admin-loans', label: '借还管理', roles: ['admin'] },
   { name: 'admin-devices', label: '设备状态' },
   { name: 'admin-alerts', label: '告警中心' },
 ]
