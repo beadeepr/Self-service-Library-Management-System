@@ -14,7 +14,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["vite/client"],
-    "baseUrl": ".",
+    // 不设 baseUrl：TypeScript 7 已将其移除（TS5102）。
+    // 无 baseUrl 时 paths 相对本文件所在目录解析，@/ 指向 src/。
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]

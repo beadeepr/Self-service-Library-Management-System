@@ -47,3 +47,14 @@ a {
 .lib-page--wide {
   max-width: 1440px;
 }
+
+.lib-text-muted {
+  color: var(--lib-text-muted);
+}
+
+/* 卡片区块之间的通用间距 */
+.lib-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

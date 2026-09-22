@@ -15,8 +15,9 @@ export interface UserProfile {
   id: number
   phone: string
   first_name: string
-  avatar: string | null
-  contact: string | null
+  /** 后端为 blank=True 的非空字段，空值形态是空字符串而不是 null */
+  avatar: string
+  contact: string
   role: Role
   verified: boolean
   credit: number

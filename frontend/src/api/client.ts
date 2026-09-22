@@ -61,20 +61,40 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
 }
 
 /**
- * 由响应体推导可读的失败原因。
- * 后端 message 在存在 detail 时即为该 detail，校验错误则放在 data 里（形如 {字段: ["消息"]}）。
+ * 在错误详情里找出第一条可读原因。
+ *
+ * 后端的失败详情层级不固定，实测形状包括：
+ *   {"detail": "原因"}
+ *   {"password": ["这个密码太常见了。"]}
+ *   {"password": {"password": ["这个密码太常见了。", "密码只包含数字。"]}}   ← 嵌套两层
+ * 因此按深度优先递归查找第一个非空字符串；深度设上限，避免异常结构导致栈溢出。
+ * 若一条都找不到，调用方会退回信封的 message。
  */
-function describeError(envelope: Envelope<unknown> | undefined, fallback: string): string {
-  if (!envelope) return fallback
-  const data = envelope.data
-  if (data && typeof data === 'object') {
-    const detail = (data as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail) return detail
-    for (const value of Object.values(data as Record<string, unknown>)) {
-      if (Array.isArray(value) && typeof value[0] === 'string') return value[0]
-      if (typeof value === 'string' && value) return value
+function firstMessage(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value === null || value === undefined) return null
+  if (typeof value === 'string') return value.trim() || null
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstMessage(item, depth + 1)
+      if (found) return found
+    }
+    return null
+  }
+  if (typeof value === 'object') {
+    const detail = (value as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+    for (const item of Object.values(value as Record<string, unknown>)) {
+      const found = firstMessage(item, depth + 1)
+      if (found) return found
     }
   }
+  return null
+}
+
+function describeError(envelope: Envelope<unknown> | undefined, fallback: string): string {
+  if (!envelope) return fallback
+  const found = firstMessage(envelope.data)
+  if (found) return found
   return envelope.message && envelope.message !== 'ok' ? envelope.message : fallback
 }
 
@@ -93,6 +113,8 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 /** 刷新接口在 401 之外的失败（例如 refresh 已过期被吊销）会让整个会话作废。 */
 function expireSession(): void {
   clearSession()
+  // 非浏览器环境（构建期检查、Node 测试）没有 location，静默跳过跳转。
+  if (typeof window === 'undefined') return
   const { pathname, search, hash } = window.location
   if (pathname === '/reader/login' || pathname === '/login') return
   const redirect = encodeURIComponent(pathname + search + hash)
@@ -160,7 +182,16 @@ http.interceptors.response.use(
     const payload: unknown = response.data
     const envelope = isEnvelope(payload) ? payload : undefined
 
-    if (response.status === 401 && config && !config._retriedAuth && !String(config.url).includes('/auth/refresh/')) {
+    // 仅在确实持有令牌时才走刷新流程。匿名访客请求受保护接口同样会收到 401，
+    // 那种情况应把错误交给页面处理，而不是跳去登录页提示「登录已过期」。
+    const hasSession = !!getAccessToken() || !!getRefreshToken()
+    if (
+      response.status === 401 &&
+      hasSession &&
+      config &&
+      !config._retriedAuth &&
+      !String(config.url).includes('/auth/refresh/')
+    ) {
       config._retriedAuth = true
       try {
         const access = await refreshAccessToken()
@@ -212,12 +243,38 @@ export function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
   return http.delete(url, config) as unknown as Promise<T>
 }
 
+/**
+ * 把任意异常转成可展示的文案。
+ * 后端 message 已由 describeError 从 detail 或字段错误中提取，ApiError.message 通常即可用。
+ */
+export function errorMessage(error: unknown, fallback = '操作失败，请稍后重试'): string {
+  if (error instanceof ApiError) return error.message || fallback
+  if (error instanceof Error) return error.message || fallback
+  return fallback
+}
+
 /** 幂等写操作。重试同一笔交易时传入上一次的 key，避免重复借还或重复入账。 */
 export function postIdempotent<T>(url: string, body?: unknown, key?: string, config: AxiosRequestConfig = {}): Promise<T> {
   return post<T>(url, body, {
     ...config,
     headers: { ...config.headers, 'Idempotency-Key': key ?? newIdempotencyKey() },
   })
+}
+
+/**
+ * 取完一个分页列表的全部条目。
+ * 后端固定每页 20 条且不开放 page_size 参数，分类、网点这类对照数据超过 20 条时
+ * 只取第一页会静默丢数据，所以按 next 逐页取完。
+ * 页码上限是防御：后端异常始终返回 next 时不至于死循环。
+ */
+export async function getAll<T>(url: string, params: Record<string, unknown> = {}): Promise<T[]> {
+  const items: T[] = []
+  for (let page = 1; page <= 50; page += 1) {
+    const data = await get<Page<T>>(url, { params: { ...params, page } })
+    items.push(...data.results)
+    if (!data.next) break
+  }
+  return items
 }
 
 export default http
