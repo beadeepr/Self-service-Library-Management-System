@@ -1,4 +1,18 @@
 services:
+  # 前端入口：读者 Web /reader、自助终端 /kiosk、管理后台 /admin
+  # 与下面的 nginx(:8080) 分开端口，避免前端路由 /admin 与 Django Admin(/admin/) 冲突：
+  #   :8081 → 前端界面（自带 nginx，托管 SPA 并同源代理 /api，不涉及跨域）
+  #   :8080 → API + Django Admin（/admin/ 带斜杠）
+  # 构建上下文必须是仓库根目录：Dockerfile 里显式列出参与构建的前端路径，
+  # 避免把宿主机 node_modules（含 Windows 原生二进制）拷进 Linux 镜像。
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend/Dockerfile
+    ports:
+      - '127.0.0.1:8081:80'
+    depends_on:
+      - api
   nginx:
     image: nginx:alpine
     ports:
@@ -37,7 +51,11 @@ services:
     env_file: .env
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-library}
-      MYSQL_USER: ${MYSQL_USER:-library}
+      # MySQL 9 的 mysqldump 即使在 --single-transaction 下仍会执行 FLUSH LOCAL TABLES，
+      # 需要 RELOAD/FLUSH_TABLES 权限；应用账号 library 没有该权限，会以 1227 失败。
+      # 备份改用 root，避免为应用账号扩大授权。
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
     entrypoint: [sh, /scripts/backup.sh]
     volumes:
       - ./deploy/backup.sh:/scripts/backup.sh:ro
