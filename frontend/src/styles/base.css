@@ -10,6 +10,17 @@
   --lib-radius: 10px;
   --lib-shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 12px rgb(16 24 40 / 6%);
   --lib-header-height: 60px;
+
+  /* 数据可视化令牌。
+   * 单系列数据色在白色卡片上通过了明度带、色度下限与对比度校验；
+   * 轨道用中性灰，不参与数据编码；状态色是固定的四档，且**必须与文字标签同时出现**，
+   * 因为在浅色面上 warning 与 serious 的对比度低于 3:1，不能只靠颜色表意。 */
+  --viz-series: #2a78d6;
+  --viz-track: #f0efec;
+  --viz-status-good: #0ca30c;
+  --viz-status-warning: #fab219;
+  --viz-status-serious: #ec835a;
+  --viz-status-critical: #d03b3b;
 }
 
 * {

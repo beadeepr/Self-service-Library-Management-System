@@ -46,7 +46,8 @@ Linux/macOS 使用 `.venv/bin/python` 替换 `.venv\Scripts\python.exe`。本地
 
 ## 3. Docker / MySQL / Redis / EMQX
 
-复制根目录 `.env.example` 为 `.env`，设置数据库密码与两个不同的随机签名密钥，再执行：
+一键启动可直接在仓库根目录执行 `.\start.ps1`（Windows）或 `./start.sh`（Git Bash / Linux / macOS），
+脚本会完成下面的全部步骤。手动执行时，先复制根目录 `.env.example` 为 `.env`，设置数据库密码与两个不同的随机签名密钥，再执行：
 
 ```powershell
 Copy-Item .env.example .env
@@ -56,10 +57,11 @@ docker compose build
 docker compose run --rm api python manage.py migrate
 docker compose run --rm api python manage.py collectstatic --noinput
 docker compose run --rm api python manage.py seed_demo --password 'Library-Demo-2026!'
-docker compose up -d api worker beat mqtt nginx backup
+docker compose run --rm api python manage.py seed_demo_showcase --password 'Reader-Demo-2026!'
+docker compose up -d
 ```
 
-先迁移数据库再启动任务进程。Nginx 入口为 `http://127.0.0.1:8080`，API 也映射到 `127.0.0.1:8000`，EMQX MQTT 映射到 `127.0.0.1:1883`；MySQL 和 Redis 不映射宿主机端口。此 Compose 为开发/演示组合，MQTT broker 未配置生产认证和 ACL。
+先迁移数据库再启动任务进程。前端界面（三端）为 `http://127.0.0.1:8081`，Nginx 入口为 `http://127.0.0.1:8080`，API 也映射到 `127.0.0.1:8000`，EMQX MQTT 映射到 `127.0.0.1:1883`；MySQL 和 Redis 不映射宿主机端口。此 Compose 为开发/演示组合，MQTT broker 未配置生产认证和 ACL。
 
 backup 服务启动后及每隔 24 小时执行一次事务一致的 MySQL 逻辑备份，保存至根目录 backups/（已被 Git 忽略），不自动删除历史备份。恢复应在独立测试库先验证；字段解密密钥须与备份分别妥善保存，否则无法恢复敏感字段。
 
@@ -81,6 +83,8 @@ backup 服务启动后及每隔 24 小时执行一次事务一致的 MySQL 逻�
 | MQTT_HOST / MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD / MQTT_TLS | MQTT 连接与 TLS 参数 |
 
 `.env` 由 Docker Compose 加载；本地直接运行时使用 PowerShell `$env:变量名='值'` 设置环境变量，不会自动加载 `.env`。
+
+本地也可在 `backend/config/local_settings.py` 中定义 `LOCAL_ENV` 字典，填写上述环境变量的字符串值。Django 启动时自动加载，终端中已设置的环境变量优先。此文件已被 Git 忽略，用于保存本机数据库连接信息，不会随代码同步。
 
 ## 4. 定时任务与设备模拟
 
@@ -121,7 +125,7 @@ docker compose exec api python manage.py simulate_device --device 1 --kind heart
 
 测试覆盖业务规则、权限隔离、幂等、预约队列、计费、支付签名、状态流转、设备事件、扫码认证、隐私清理及 OpenAPI 鉴权。测试数据库独立创建和销毁，不使用演示数据。
 
-当前验证环境为 Windows / Python 3.14 / SQLite。Docker 服务、真实 MySQL 并发、MQTT broker 实连和需求中的 500 并发/99.9% 可用性需要在相应部署环境另行验收，不能从 SQLite 单元测试推断已达标。
+当前验证环境为 Windows / Python 3.13 / SQLite。Docker 服务、真实 MySQL 并发、MQTT broker 实连和需求中的 500 并发/99.9% 可用性需要在相应部署环境另行验收，不能从 SQLite 单元测试推断已达标。
 
 自动化测试包含原有业务流程，以及资料/工单并发交错、离线跨账号去重、MQTT 持久化确认和失败重试、节假日本地时区等回归场景。此前实际 HTTP 已完成手机号登录 → 检索副本 → 借书 → 跨角色消毒/上架的归还闭环。
 
@@ -134,6 +138,7 @@ docker compose exec api python manage.py simulate_device --device 1 --kind heart
 项目内需求文档与架构设计决定业务范围。事务边界和 API 权限设计参考 [Django 事务文档](https://docs.djangoproject.com/en/5.2/topics/db/transactions/) 与 [DRF 权限文档](https://www.django-rest-framework.org/api-guide/permissions/)。
 
 字段加密使用 [Cryptography 的 AES-SIV 实现](https://cryptography.io/en/49.0.0/hazmat/primitives/aead/)，确定性加密仅用于需精确匹配的字段，会暴露相等关系，不支持密文模糊检索。密钥独立于数据库保存。
-# 分工与核心接口入口
+
+## 7. 分工与核心接口入口
 
 王恒负责的核心 API、服务文件及新增联调路径见 [接口分工说明](../docs/api/README.md)。可直接导入 [Postman 集合](../docs/api/postman_collection.json)，原 `/api/v1/` 接口继续可用。

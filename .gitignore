@@ -3,6 +3,7 @@ _local/
 __pycache__/
 *.py[cod]
 .env
+backend/config/local_settings.py
 *.sqlite3
 staticfiles/
 .coverage

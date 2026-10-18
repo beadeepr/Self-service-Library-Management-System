@@ -5,7 +5,7 @@
  * 注意书目（Book）与副本（Copy）是两层：库存数量由副本统计得出，
  * 借书接口收的是副本 ID 而不是书目 ID，所以详情页必须能按书目查出副本。
  */
-import { get, type Page } from './client'
+import { del, get, patch, post, postIdempotent, type Page } from './client'
 
 export type CopyStatus = 'available' | 'loaned' | 'reserved' | 'processing' | 'transit' | 'withdrawn' | 'lost'
 
@@ -122,6 +122,11 @@ export function searchCopies(query: { book?: number; branch?: number; status?: C
   return get<Page<Copy>>('/copies/', { params: clean({ ...query }) })
 }
 
+/** 按副本编号直取。副本列表按页返回，靠列表查找会在超过一页时漏掉。 */
+export function fetchCopy(id: number | string): Promise<Copy> {
+  return get<Copy>(`/copies/${id}/`)
+}
+
 export function listCategories(): Promise<Page<Category>> {
   return get<Page<Category>>('/categories/')
 }
@@ -133,4 +138,55 @@ export function listBranches(): Promise<Page<Branch>> {
 /** 在馆人数与估算空闲座位，公开接口。 */
 export function fetchBranchOccupancy(id: number | string): Promise<BranchOccupancy> {
   return get<BranchOccupancy>(`/branches/${id}/occupancy/`)
+}
+
+/* ------------------- 以下为管理端操作 -------------------
+ * 写权限边界（后端 PublicReadAdminWrite / AdminOnly / StaffOnly 决定）：
+ * - 书目新增、修改、删除、入库：仅 admin
+ * - 副本下架/报损（set-status）：仅 admin
+ * - 副本消毒、上架：admin 与 operator 都可以
+ * 前端据 auth.isAdmin 控制入口，但真正的边界在后端。
+ */
+
+export interface BookInput {
+  isbn: string
+  title: string
+  author: string
+  category: number
+  call_number: string
+  price: string
+  publisher?: string
+  cover?: string
+  active?: boolean
+}
+
+export function createBook(input: BookInput): Promise<Book> {
+  return post<Book>('/books/', input)
+}
+
+export function updateBook(id: number, input: Partial<BookInput>): Promise<Book> {
+  return patch<Book>(`/books/${id}/`, input)
+}
+
+export function deleteBook(id: number): Promise<null> {
+  return del<null>(`/books/${id}/`)
+}
+
+/** 入库：按数量创建副本并生成唯一 RFID。幂等，quantity 上限 500。 */
+export function intakeCopies(bookId: number, input: { branch: number; quantity: number; shelf?: string }, key?: string): Promise<{ copies: Copy[] }> {
+  return postIdempotent<{ copies: Copy[] }>(`/books/${bookId}/intake/`, input, key)
+}
+
+/** 下架、报损或转待处理，reason 必填。 */
+export function setCopyStatus(copyId: number, status: 'withdrawn' | 'lost' | 'processing', reason: string): Promise<Copy> {
+  return post<Copy>(`/copies/${copyId}/set-status/`, { status, reason })
+}
+
+export function disinfectCopy(copyId: number): Promise<Copy> {
+  return post<Copy>(`/copies/${copyId}/disinfect/`)
+}
+
+/** 上架：待处理副本转可借，并自动分配下一位预约者。 */
+export function shelveCopy(copyId: number, shelf: string): Promise<Copy> {
+  return post<Copy>(`/copies/${copyId}/shelve/`, { shelf })
 }

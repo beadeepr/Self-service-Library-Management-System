@@ -109,7 +109,13 @@ const adminRoutes: RouteRecordRaw = {
       // 后端 readers/ 为 AdminOnly，运维访问会 403，故此处也限制为管理员。
       meta: { title: '读者管理', roles: ['admin'] },
     },
-    { path: 'loans', name: 'admin-loans', component: () => import('@/views/admin/LoansManageView.vue'), meta: { title: '借还管理' } },
+    {
+      path: 'loans',
+      name: 'admin-loans',
+      component: () => import('@/views/admin/LoansManageView.vue'),
+      // 后端 LoanViewSet 对非管理员只返回本人借阅，运维进来只会看到空表且无法处置他人借阅。
+      meta: { title: '借还管理', roles: ['admin'] },
+    },
     { path: 'devices', name: 'admin-devices', component: () => import('@/views/admin/DevicesView.vue'), meta: { title: '设备状态' } },
     { path: 'alerts', name: 'admin-alerts', component: () => import('@/views/admin/AlertsView.vue'), meta: { title: '告警中心' } },
   ],
