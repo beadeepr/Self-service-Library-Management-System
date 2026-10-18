@@ -1,8 +1,11 @@
-# 成员 C → 成员 B 联调说明
+# 物联 / 前端联调说明（刘经纬 ↔ 周硕）
 
 后端 API 前缀均为 **`/api/v1/`**（不是 `/api/`）。  
 鉴权头：`Authorization: Bearer <access>`  
 写操作建议加：`Idempotency-Key: <uuid>`
+
+启动：仓库根目录 `.\start.ps1`（Docker，推荐）或 `.\start.ps1 -Mode local`。  
+前端入口见 [`frontend/README.md`](../frontend/README.md)。
 
 ## 1. 门禁 / 在馆（C 负责演示，B 做 Kiosk 页面）
 
@@ -37,20 +40,22 @@
 | GET | `/api/v1/alerts/` | 告警列表 |
 | GET | `/api/v1/reports/summary/` | 运营汇总（如有） |
 
-## 3. IoT 演示（C 负责）
+## 3. IoT 演示（刘经纬负责，答辩另开终端）
 
 ```powershell
-# 终端 1：Docker
-docker compose up -d emqx mysql redis api mqtt worker beat
+# 终端 1：主系统（含 EMQX + mqtt_bridge）
+.\start.ps1
 
-# 终端 2：初始化 + 模拟器
-python backend/manage.py seed_demo --password "Library-Demo-2026!"
+# 终端 2：模拟器
+pip install -r iot-simulator/requirements.txt
 python iot-simulator/seed_devices.py
 python iot-simulator/run_demo.py
+# 或：python iot-simulator/simulator.py
 ```
 
-烟感事件会触发：告警 + 门禁 `unlock` 命令（模拟器订阅 `command` 主题可看到）。
+烟感 → 告警 + 门禁 `unlock`；管理后台「告警中心」「设备状态」可刷新查看。
 
 ## 4. Swagger
 
-`http://127.0.0.1:8000/api/docs/` — 登录后 Authorize 填入 `Bearer <access>`。
+Docker：`http://127.0.0.1:8081/api/docs/`；local 模式：`http://127.0.0.1:8000/api/docs/`。  
+登录后 Authorize 填入 `Bearer <access>`。

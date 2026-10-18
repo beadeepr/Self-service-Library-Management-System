@@ -12,6 +12,7 @@
 - **前端启动、三端入口、演示账号与答辩脚本：[`frontend/README.md`](frontend/README.md)**
 - 接口清单、业务约定与需求映射：[`backend/docs/API.md`](backend/docs/API.md)
 - OpenAPI 文件：[`backend/openapi.yaml`](backend/openapi.yaml)
+- **IoT 设备模拟器（答辩演示）：[`iot-simulator/`](iot-simulator/)**
 - 运行后交互文档：`http://127.0.0.1:8000/api/docs/`
 
 需求文档、架构设计、架构评审与三人分工见仓库根目录的同名 Markdown 文件。
@@ -58,6 +59,19 @@ npm run dev
 演示账号：`13800000001`（管理员）/ `13800000002`（读者）/ `13800000003`（运维），
 口令为 `seed_demo` 的 `--password`。三端入口与更完整的演示数据见
 [`frontend/README.md`](frontend/README.md)。
+
+### IoT 答辩演示（另开终端）
+
+主系统启动后（`.\start.ps1`），在第二个终端：
+
+```powershell
+pip install -r iot-simulator/requirements.txt
+python iot-simulator/seed_devices.py
+python iot-simulator/run_demo.py          # 自动：心跳 → 烟感 → RFID
+python iot-simulator/simulator.py         # 交互菜单
+```
+
+详见 [`iot-simulator/README.md`](iot-simulator/README.md)。
 
 ## 运行说明
 

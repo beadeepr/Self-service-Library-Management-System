@@ -3,12 +3,17 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
-Write-Host "=== 1. 检查 Docker EMQX ===" -ForegroundColor Cyan
+Write-Host "=== 1. 检查 MQTT（EMQX）===" -ForegroundColor Cyan
 $emqx = docker ps --filter "name=emqx" --format "{{.Names}}" 2>$null
 if (-not $emqx) {
-    Write-Host "启动 emqx..." 
-    docker compose up -d emqx
+    Write-Host "未检测到 emqx 容器，尝试启动 compose 中的 emqx + mqtt ..."
+    docker compose up -d emqx mqtt 2>$null
     Start-Sleep -Seconds 5
+}
+$mqttOk = Test-NetConnection -ComputerName 127.0.0.1 -Port 1883 -WarningAction SilentlyContinue
+if (-not $mqttOk.TcpTestSucceeded) {
+    Write-Host "1883 不可达。请先运行仓库根目录 .\start.ps1，或 docker compose up -d emqx mqtt" -ForegroundColor Yellow
+    exit 1
 }
 
 Write-Host "=== 2. 初始化后端数据 ===" -ForegroundColor Cyan

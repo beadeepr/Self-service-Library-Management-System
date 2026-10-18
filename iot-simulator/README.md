@@ -1,6 +1,8 @@
-# IoT 设备模拟器（成员 C）
+# IoT 设备模拟器（刘经纬）
 
 与后端 `mqtt_bridge` / `simulate_device` 使用**相同 MQTT 协议**，提供答辩用的**交互式菜单**，便于演示烟感联动、RFID 防盗、紧急求助等场景。
+
+> 先启动主系统：`.\start.ps1`（Docker）或 `.\start.ps1 -Mode local`（本机）。本目录脚本在**另一个终端**运行。
 
 ## 协议
 
