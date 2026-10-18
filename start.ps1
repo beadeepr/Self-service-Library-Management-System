@@ -133,6 +133,11 @@ function Show-Summary([string]$Frontend, [string]$AdminUrl, [string]$DocsUrl, [s
     Write-Host '    13480588246  读者(逾期) / Reader-Demo-2026!'
     Write-Host '    13380588246  读者(持书) / Reader-Demo-2026!'
     Write-Host ''
+    Write-Host '  IoT 答辩演示（另开终端）' -ForegroundColor Cyan
+    Write-Host '    pip install -r iot-simulator/requirements.txt'
+    Write-Host '    python iot-simulator/seed_devices.py'
+    Write-Host '    python iot-simulator/run_demo.py'
+    Write-Host ''
     Write-Host "  停止：$StopHint" -ForegroundColor DarkGray
     Write-Host ''
 }

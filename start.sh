@@ -156,6 +156,10 @@ show_summary() {
     printf '    13800000003  运维       / Library-Demo-2026!\n'
     printf '    13480588246  读者(逾期) / Reader-Demo-2026!\n'
     printf '    13380588246  读者(持书) / Reader-Demo-2026!\n'
+    printf '\n  IoT 答辩演示（另开终端）\n'
+    printf '    pip install -r iot-simulator/requirements.txt\n'
+    printf '    python iot-simulator/seed_devices.py\n'
+    printf '    python iot-simulator/run_demo.py\n'
     printf '\n%s  停止：%s%s\n\n' "$C_DIM" "$stop_hint" "$C_OFF"
 }
 
