@@ -6,6 +6,11 @@ import vue from '@vitejs/plugin-vue'
 // 生产由 deploy/nginx.conf 反向代理同一批前缀，因此无需区分环境变量。
 const BACKEND = process.env.VITE_BACKEND_ORIGIN || 'http://127.0.0.1:8000'
 
+const proxy = {
+  '/api': { target: BACKEND, changeOrigin: true },
+  '/health': { target: BACKEND, changeOrigin: true },
+}
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -14,9 +19,12 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
-    proxy: {
-      '/api': { target: BACKEND, changeOrigin: true },
-      '/health': { target: BACKEND, changeOrigin: true },
-    },
+    proxy,
+  },
+  // vite preview 不读取 server.proxy，需单独配置，否则 `npm run preview` 无法访问后端。
+  preview: {
+    host: '127.0.0.1',
+    port: 4173,
+    proxy,
   },
 })
