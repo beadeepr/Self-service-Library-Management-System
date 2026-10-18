@@ -18,6 +18,25 @@
 
 ## 快速开始
 
+### 一键启动（推荐）
+
+仓库根目录提供两个等价的启动脚本：
+
+```powershell
+.\start.ps1                  # Docker：初始化并启动全部服务，入口 http://127.0.0.1:8081
+.\start.ps1 -Mode local      # 本机双进程：Django :8000 + Vite :5173（SQLite）
+```
+
+```bash
+./start.sh                   # 同上（Git Bash / WSL / Linux / macOS）
+./start.sh --local
+```
+
+脚本会检查 Docker（或 Python / Node）、在缺少 `.env` 时按 `.env.example` 生成随机密钥、
+按需构建镜像，并依次执行 `migrate`、`collectstatic`、`seed_demo`、`seed_demo_showcase`。
+这些步骤都是幂等的，可以反复执行；`-Rebuild`（`--rebuild`）强制重建镜像，
+`-SkipSeed`（`--skip-seed`）跳过演示数据，`-NoBrowser`（`--no-browser`）不自动打开浏览器。
+
 ### 本地开发（两个进程）
 
 ```powershell
