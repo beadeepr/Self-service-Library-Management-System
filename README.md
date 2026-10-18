@@ -36,6 +36,7 @@
 按需构建镜像，并依次执行 `migrate`、`collectstatic`、`seed_demo`、`seed_demo_showcase`。
 这些步骤都是幂等的，可以反复执行；`-Rebuild`（`--rebuild`）强制重建镜像，
 `-SkipSeed`（`--skip-seed`）跳过演示数据，`-NoBrowser`（`--no-browser`）不自动打开浏览器。
+需要逐步手工操作时，见 [`frontend/README.md`](frontend/README.md) 的「Docker 部署」一节。
 
 ### 本地开发（两个进程）
 
@@ -45,6 +46,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
 .\.venv\Scripts\python.exe backend/manage.py migrate
 .\.venv\Scripts\python.exe backend/manage.py seed_demo --password 'Library-Demo-2026!'
+.\.venv\Scripts\python.exe backend/manage.py seed_demo_showcase --password 'Reader-Demo-2026!'
 .\.venv\Scripts\python.exe backend/manage.py runserver 127.0.0.1:8000
 
 # 2. 前端：另开一个终端，打开 http://127.0.0.1:5173
@@ -56,11 +58,6 @@ npm run dev
 演示账号：`13800000001`（管理员）/ `13800000002`（读者）/ `13800000003`（运维），
 口令为 `seed_demo` 的 `--password`。三端入口与更完整的演示数据见
 [`frontend/README.md`](frontend/README.md)。
-
-### Docker
-
-一条命令式启动（含前端、MySQL、Redis、Celery、EMQX），步骤见
-[`frontend/README.md`](frontend/README.md) 的「Docker 部署」一节。
 
 ## 运行说明
 

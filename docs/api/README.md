@@ -18,11 +18,13 @@
 
 共享视图基类在 `api/base.py`，权限与异常处理在 `api/common.py`，响应包装在 `api/renderers.py`。原 `api/resources.py`、`api/circulation.py`、`api/operations.py` 中已迁出的类保留兼容导入；旧服务模块 `authentication.py`、`circulation.py`、`payments.py` 也保留兼容导入。新功能应修改表中的实现文件。
 
-本次没有修改数据库模型、迁移文件和 MQTT 实现。原 `/api/v1/` 接口继续可用。
+本批接口整理没有修改数据库模型、迁移文件和 MQTT 实现。原 `/api/v1/` 接口继续可用。
 
 ## 联调约定
 
 默认地址 `http://127.0.0.1:8000`。JSON 响应为 `{code, message, data, request_id}`；`code=0` 成功，库存不可借为 HTTP 200、`code=4001`，客户端需同时检查业务码。分页数据在 `data.results`。
+
+下表列出的是兼容短路径，与 `/api/v1/` 下的同名接口等价；新代码统一使用 `/api/v1/...`（如 `/api/v1/auth/login/`、`/api/v1/loans/borrow/`）。
 
 | 方法与地址 | 请求内容 | 权限 |
 | --- | --- | --- |

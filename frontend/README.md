@@ -136,7 +136,8 @@ frontend/
 ## Docker 部署
 
 前端以独立服务加入根目录 [`../compose.yaml`](../compose.yaml)，镜像定义在
-[`../deploy/frontend/`](../deploy/frontend/)：
+[`../deploy/frontend/`](../deploy/frontend/)。以下步骤等价于在仓库根目录执行 `./start.sh`
+（或 `.\start.ps1`），手工执行时按顺序：
 
 ```bash
 docker compose up -d mysql redis emqx
