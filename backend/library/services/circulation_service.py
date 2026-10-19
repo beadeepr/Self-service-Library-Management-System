@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from library.models import Book, Copy, Fine, Loan, Notification, Reservation, User
-from .common import audit, owner_or_admin, require, rules, StockUnavailable
+from .common import audit, is_admin, owner_or_admin, require, rules, StockUnavailable
 from library.events import emit
 from .rule_engine import shift_holidays, eligible
 from .reader_service import change_credit
@@ -67,9 +67,14 @@ def borrow(actor, reader_id, copy_id, occurred_at=None):
 
 
 @transaction.atomic
-def return_book(actor, loan_id, branch_id, damaged=False, occurred_at=None):
+def return_book(actor, loan_id, branch_id, damaged=False, occurred_at=None, allow_other_reader=False):
     snapshot = get_object_or_404(Loan, pk=loan_id)
-    owner_or_admin(actor, snapshot.reader_id)
+    if not allow_other_reader:
+        owner_or_admin(actor, snapshot.reader_id)
+    # 自助还书允许替他人归还，但损坏标记只能由借阅本人或管理员给出，
+    # 避免归还者通过 damaged 扣除他人的信用分。
+    if damaged and not is_admin(actor) and actor.pk != snapshot.reader_id:
+        damaged = False
     User.objects.select_for_update().get(pk=snapshot.reader_id)
     Book.objects.select_for_update().get(pk=snapshot.copy.book_id)
     copy = Copy.objects.select_for_update().get(pk=snapshot.copy_id)
@@ -114,7 +119,10 @@ def renew(actor, loan_id):
     eligible(reader, rule)
     require(loan.returned_at is None and loan.due_at > timezone.now(), '已归还或逾期图书不可续借')
     require(loan.renewals < rule.renewal_limit, '续借次数已达上限')
-    require(not Reservation.objects.filter(book=loan.copy.book, status__in=['waiting', 'ready']).exists(), '已有读者预约，不可续借')
+    # 只有同馆仍在等待的预约会阻止续借。其他馆的预约由调拨满足；
+    # ready 状态的预约已经绑定了其他副本，不再需要当前这册。
+    require(not Reservation.objects.filter(book=loan.copy.book, branch_id=loan.copy.branch_id,
+            status='waiting').exists(), '已有读者预约，不可续借')
     days = rule.verified_loan_days if reader.verified else rule.loan_days
     loan.due_at = shift_holidays(loan.due_at + timedelta(days=days), rule)
     loan.renewals += 1
@@ -133,7 +141,12 @@ def reserve(actor, book_id, branch_id):
     from library.models import Branch
     get_object_or_404(Branch, pk=branch_id, active=True)
     copies = Copy.objects.filter(book=book, branch_id=branch_id)
-    require(copies.filter(status='loaned').exists() and not copies.filter(status='available').exists(), '仅可预约已有借出馆藏且无可借副本的图书')
+    # 该网点无任何可借副本时允许排队；loaned/reserved/processing/transit 都算“不可借”。
+    require(not copies.filter(status='available').exists()
+            and copies.exclude(status__in=['available', 'withdrawn', 'lost']).exists(),
+            '仅可预约当前无可借副本的图书')
+    require(not Loan.objects.filter(reader=reader, copy__book=book, returned_at=None).exists(),
+            '正在借阅该图书，无需预约')
     active = Reservation.objects.filter(reader=reader, status__in=['waiting', 'ready'])
     require(active.count() < rule.reservation_limit, '已达到预约上限')
     require(not active.filter(book=book).exists(), '不可重复预约同一图书')

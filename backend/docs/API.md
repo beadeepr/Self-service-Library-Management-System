@@ -32,7 +32,7 @@
 | POST readers/phone/ | 登录用户 | 新手机号及对应换号验证码 |
 | POST readers/verify-identity/ | 登录用户 | 单独同意后模拟核验 18 位证件，保存 HMAC 摘要而非明文 |
 | GET readers/、readers/{id}/ | 管理员 | 读者查询与检索 |
-| POST readers/{id}/manage/ | 管理员 | **幂等**：冻结、重置密码、信用增减、押金增减；reason 必填 |
+| POST readers/{id}/manage/ | 管理员（普通管理员仅限读者账号） | **幂等**：冻结、重置密码、信用增减、押金增减；reason 必填 |
 | GET credit-entries/、deposit-entries/ | 本人/管理员 | 信用和押金流水 |
 | GET/POST consents/ | 本人 | 追加同意/撤回记录，purpose=identity 或 biometric |
 
@@ -54,7 +54,8 @@
 | POST copies/{id}/shelve/ | 管理员/运维 | shelf；待处理副本上架并分配下一位预约者 |
 | GET loans/、loans/{id}/ | 本人/管理员 | 借阅历史；returned_at__isnull=true 查当前借阅，due_at__lt 查逾期 |
 | POST loans/borrow/ | 本人/管理员 | **幂等**：copy；管理员可指定 reader 手工借书 |
-| POST loans/{id}/return/ | 本人/管理员 | **幂等**：branch、可选 damaged；允许跨馆归还 |
+| GET loans/lookup/?copy= | 登录用户 | 按副本查当前未归还的借阅，供自助终端替他人归还 |
+| POST loans/{id}/return/ | 登录用户/管理员 | **幂等**：branch、可选 damaged；允许跨馆归还；替他人归还时 damaged 不生效 |
 | POST loans/{id}/renew/ | 本人/管理员 | **幂等**：续借，校验逾期、预约队列、次数、欠费 |
 | POST loans/{id}/remind/ | 管理员 | 发送站内催还通知 |
 | GET reservations/、reservations/{id}/ | 本人/管理员 | 查看预约 |
@@ -67,7 +68,7 @@
 | POST payments/{id}/simulate/ | 本人/管理员 | 模拟缴费，重复调用不重复入账 |
 | POST payments/{id}/offline/ | 管理员 | 登记线下缴费 |
 | POST payments/callback/ | HMAC 签名 | 验签、金额校验、5 分钟时间窗、重复回调幂等 |
-| GET/PATCH rules/{id}/、GET rules/ | 管理员 | 借期、上限、罚款费率、预约保留、节假日、留存期等规则 |
+| GET/PATCH rules/{id}/、GET rules/ | 管理员 | 借期、上限、罚款费率、预约保留、节假日、留存期、在馆超时收尾（visit_max_hours）等规则 |
 
 借还、续借、预约、支付、调拨在数据库事务中执行，锁定关键读者/书目/副本记录；有效借阅另有唯一 active_copy 约束。SQLite 不实现 MySQL 的行锁语义。
 
@@ -87,7 +88,7 @@
 | GET device-events/、device-commands/ | 管理员/运维 | 遥测、设备影子来源和命令执行台账 |
 | GET alerts/ | 管理员/运维 | 分级告警查询 |
 | POST alerts/{id}/transition/ | 管理员/运维 | open → acknowledged → resolved，关闭需 resolution |
-| POST visits/access/ | 本人/管理员 | **幂等**：branch、direction=enter/exit、method=qr/card/face |
+| POST visits/access/ | 本人/管理员 | **幂等**：branch、direction=enter/exit、method=qr/card/face；核验通过后为该馆门禁生成 unlock 指令 |
 | GET visits/ | 本人/管理员 | 进出馆历史 |
 | GET branches/{id}/occupancy/ | 公开 | 在馆人数、容量、按人数估算的空闲座位数 |
 | POST visits/help/ | 登录用户 | branch、message；发送紧急求助告警 |
@@ -98,9 +99,9 @@
 | GET/POST inventories/ | 管理员/运维 | RFID 手工盘点，返回 missing/surplus/misplaced |
 | operations/ | 管理员/运维 | 职责、绩效、工时、成本、应急预案、演练、视频索引 CRUD |
 | GET audit-logs/ | 管理员 | 不可通过 API 修改的操作审计 |
-| POST offline/sync/ | 管理员 | 批量离线交易补传，每批 1~100 条，逐条返回 applied/conflict |
+| POST offline/sync/ | 登录用户/管理员 | 批量离线交易补传，每批 1~100 条，逐条返回 applied/conflict；读者只能补传本人交易 |
 
-网点开闭时间相同表示全天开放，支持跨午夜开放区间；入馆检查信用、冻结、人数上限和重复入馆。门禁身份方式采用已鉴权读者与模拟设备语义；人脸方式还须最新 biometric 同意。正常出馆不受欠费或信用限制，冻结账号由管理员出馆补录或应急解锁处理。
+网点开闭时间相同表示全天开放，支持跨午夜开放区间；入馆检查信用、冻结、人数上限和重复入馆；在馆时间超过规则 `visit_max_hours` 的记录会自动收尾并释放人数。门禁身份方式采用已鉴权读者与模拟设备语义；人脸方式还须最新 biometric 同意；进/出馆核验通过后为该馆门禁生成 `unlock` 指令（模拟环境只登记不执行）。正常出馆不受欠费或信用限制，冻结账号由管理员出馆补录或应急解锁处理。
 
 设备未借出 RFID 离馆触发防盗告警；烟感触发严重告警、维修任务与门禁联动命令记录。MQTT 与 REST 使用同一事件处理服务。真实设备控制需接入命令消费/执行回执适配器；`pending` 不等于实际执行完成。
 
@@ -122,7 +123,7 @@
 }
 ```
 
-返回记录使用 `kind=return`、`loan`、`branch`。event_id 是全局唯一的交易 UUID，重试必须保持事件 ID 和内容不变；更换上传管理员后仍返回原处理结果，不重新借还。相同事件 ID 携带不同内容会返回 conflict。借阅与归还时间采用 occurred_at；补传仍重新检查服务器库存/资格，不覆盖冲突记录。离线归还早于已经计费日期时返回复核冲突，管理员先调整罚款再重传。浏览器或终端的离线本地队列、离线身份授权凭证属于客户端部分，本后端提供补传与冲突处理接口。
+返回记录使用 `kind=return`、`loan`、`branch`，可选 `damaged`。读者身份的终端可省略 `reader`，默认补传本人交易；管理员代传时仍须显式指定。event_id 是全局唯一的交易 UUID，重试必须保持事件 ID 和内容不变；更换上传者后仍返回原处理结果，不重新借还。相同事件 ID 携带不同内容会返回 conflict。借阅与归还时间采用 occurred_at；补传仍重新检查服务器库存/资格，不覆盖冲突记录。离线归还早于已经计费日期时返回复核冲突，管理员先调整罚款再重传。浏览器或终端的离线本地队列、离线身份授权凭证属于客户端部分，本后端提供补传与冲突处理接口。
 
 ## 消息、统计、集成和扩展
 

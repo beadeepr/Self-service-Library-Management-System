@@ -319,6 +319,7 @@ class OfflineItemSerializer(serializers.Serializer):
     copy = serializers.IntegerField(min_value=1, required=False)
     loan = serializers.IntegerField(min_value=1, required=False)
     branch = serializers.IntegerField(min_value=1, required=False)
+    damaged = serializers.BooleanField(required=False, default=False)
     occurred_at = serializers.DateTimeField()
 
 

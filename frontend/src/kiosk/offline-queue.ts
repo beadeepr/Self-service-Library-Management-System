@@ -2,10 +2,8 @@
  * 离线交易本地队列，对应 FR-34 的客户端部分（IndexedDB + 幂等去重）。
  *
  * 必须如实说明的边界：
- * - 浏览器/终端的离线本地队列与离线身份授权凭证属于**客户端职责**，
- *   后端只提供补传与冲突处理接口 `/api/offline/sync/`，而该接口**仅管理员可用**。
- *   因此以读者身份操作的自助终端实际上无法自行补传 —— 本模块演示的是
- *   「队列、幂等键、状态回写」这套客户端机制，不声称已打通真实离线借还。
+ * - 读者身份可以补传自己的交易，服务端按当前用户校验归属；管理员仍可代传。
+ * - 浏览器/终端的离线身份授权凭证仍属于客户端职责，当前演示不包含离线登录。
  * - 每笔交易携带全局唯一的 `event_id`，重试必须保持该 ID 与内容不变；
  *   同一 ID 携带不同内容会被后端判为 conflict，需要人工复核。
  * - 补传不是「回放本地结果」：后端仍会重新校验库存与读者资格，冲突不会被覆盖。
@@ -30,6 +28,8 @@ export interface OfflineTransaction {
   /** 还书需要 */
   loan?: number
   branch?: number
+  /** 还书时是否登记图书损坏（仅借阅本人或管理员生效） */
+  damaged?: boolean
   /** 本地同步状态，由后端逐条结果回写 */
   sync?: 'pending' | 'applied' | 'conflict'
   message?: string
@@ -102,48 +102,64 @@ interface SyncResult {
 }
 
 /**
- * 尝试补传队列中的全部交易。
+ * 尝试补传队列中尚未成功的交易。
  *
- * 注意权限：后端 `/offline/sync/` 仅管理员可用，读者身份的终端调用会被拒绝（403），
- * 此时本函数把错误原样抛出，由界面如实提示，而不是假装补传成功。
+ * 读者身份即可调用（后端按当前用户校验交易归属），已成功的条目不再重复提交。
+ * 后端每批最多 100 条，超出时自动分批。
  */
-export async function syncNow(): Promise<SyncResult> {
-  const transactions = await listQueued()
-  if (!transactions.length) return { applied: 0, conflict: 0, pending: 0, messages: [] }
-
-  // 只提交后端需要的字段，本地状态不发给服务端。
-  const payload = {
-    transactions: transactions.map((item) => {
-      const { event_id, kind, occurred_at, reader, copy, loan, branch } = item
-      return Object.fromEntries(
-        Object.entries({ event_id, kind, occurred_at, reader, copy, loan, branch }).filter(([, value]) => value !== undefined),
-      )
-    }),
+export function syncNow(): Promise<SyncResult> {
+  // 多个页面可能同时监听 online 事件；共享同一个进行中的请求，避免重复提交。
+  if (!syncInFlight) {
+    syncInFlight = runSync().finally(() => {
+      syncInFlight = null
+    })
   }
+  return syncInFlight
+}
 
-  // 后端逐条返回 {event_id, status, result|detail}；冲突原因是 detail，成功时是 result。
-  const data = await post<{ results?: { event_id: string; status: string; result?: unknown; detail?: unknown }[] }>(
-    '/offline/sync/',
-    payload,
-  )
-  const results = data?.results ?? []
+let syncInFlight: Promise<SyncResult> | null = null
+
+async function runSync(): Promise<SyncResult> {
+  const transactions = await listQueued()
+  const pendingItems = transactions.filter((item) => item.sync !== 'applied')
+  if (!pendingItems.length) return { applied: 0, conflict: 0, pending: 0, messages: [] }
+
   const summary: SyncResult = { applied: 0, conflict: 0, pending: 0, messages: [] }
-
-  for (const result of results) {
-    const item = transactions.find((entry) => entry.event_id === result.event_id)
-    if (!item) continue
-    if (result.status === 'applied') {
-      summary.applied += 1
-      item.sync = 'applied'
-      item.message = undefined
-    } else {
-      summary.conflict += 1
-      item.sync = 'conflict'
-      const detail = typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail ?? '冲突')
-      item.message = detail
-      summary.messages.push(detail)
+  for (let start = 0; start < pendingItems.length; start += 100) {
+    const batch = pendingItems.slice(start, start + 100)
+    // 只提交后端需要的字段，本地状态不发给服务端。
+    const payload = {
+      transactions: batch.map((item) => {
+        const { event_id, kind, occurred_at, reader, copy, loan, branch, damaged } = item
+        return Object.fromEntries(
+          Object.entries({ event_id, kind, occurred_at, reader, copy, loan, branch, damaged }).filter(
+            ([, value]) => value !== undefined,
+          ),
+        )
+      }),
     }
-    await withStore('readwrite', (store) => store.put(item))
+
+    // 后端逐条返回 {event_id, status, result|detail}；冲突原因是 detail，成功时是 result。
+    const data = await post<{ results?: { event_id: string; status: string; result?: unknown; detail?: unknown }[] }>(
+      '/offline/sync/',
+      payload,
+    )
+    for (const result of data?.results ?? []) {
+      const item = batch.find((entry) => entry.event_id === result.event_id)
+      if (!item) continue
+      if (result.status === 'applied') {
+        summary.applied += 1
+        item.sync = 'applied'
+        item.message = undefined
+      } else {
+        summary.conflict += 1
+        item.sync = 'conflict'
+        const detail = typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail ?? '冲突')
+        item.message = detail
+        summary.messages.push(detail)
+      }
+      await withStore('readwrite', (store) => store.put(item))
+    }
   }
 
   // 后端未回执的项保持待处理，不能想当然认为已成功。

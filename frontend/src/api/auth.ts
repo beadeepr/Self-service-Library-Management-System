@@ -9,6 +9,8 @@ export interface TokenPayload {
   access: string
   refresh: string
   role: Role
+  /** 超级管理员在后端拥有运维权限；前端据此决定是否显示设备指令入口。 */
+  is_superuser?: boolean
 }
 
 export interface UserProfile {

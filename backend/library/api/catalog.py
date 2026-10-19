@@ -67,7 +67,13 @@ class BookViewSet(AuditedModelViewSet):
         book = self.get_object()
         data = validated(s.IntakeSerializer, request)
         def execute():
-            copies = [m.Copy.objects.create(book=book, branch=data['branch'], shelf=data['shelf']) for _ in range(data['quantity'])]
+            from library.services.circulation_service import assign_hold
+            # 先锁书目，保证新增副本与预约队列分配和借还/上架串行。
+            book_row = m.Book.objects.select_for_update().get(pk=book.pk)
+            copies = [m.Copy.objects.create(book=book_row, branch=data['branch'], shelf=data['shelf']) for _ in range(data['quantity'])]
+            # 新增馆藏同样要满足等待中的预约，否则预约者会一直被跳过。
+            for copy in copies:
+                assign_hold(copy)
             audit(request.user, 'book.intake', book, quantity=len(copies))
             return {'copies': s.CopySerializer(copies, many=True).data}
         return Response(idempotent(request.user, request.headers.get('Idempotency-Key'), f'book.intake:{pk}', request.data, execute), status=201)
@@ -105,6 +111,11 @@ class CopyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
             require(copy.status not in ['loaned', 'reserved', 'transit'], '须先结束借阅、预约或配送流程')
             require(not m.Transfer.objects.filter(copy=copy, status='planned').exists(), '图书已有待发货任务')
             copy.status = data['status']
-            copy.save()
+            if copy.status == 'available':
+                # 恢复可借时把副本交给等待中的预约者，而不是直接开放给所有人。
+                from library.services.circulation_service import assign_hold
+                assign_hold(copy)
+            else:
+                copy.save()
             audit(request.user, 'copy.status', copy, **data)
         return Response(self.get_serializer(copy).data)

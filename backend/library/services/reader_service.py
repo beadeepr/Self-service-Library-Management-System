@@ -19,6 +19,8 @@ def verify_identity(actor, identity):
     consent = Consent.objects.filter(reader=actor, purpose='identity').order_by('-id').first()
     require(consent and consent.granted, '请先同意实名认证告知')
     user = User.objects.select_for_update().get(pk=actor.pk)
+    # 一人一证：完成认证后不允许自行改绑，避免覆盖已核验身份或抢占他人证件。
+    require(not user.verified and not user.identity_digest, '已完成实名认证，如需变更证件请联系管理员')
     digest = salted_hmac('identity', identity, algorithm='sha256').hexdigest()
     require(not User.objects.filter(identity_digest=digest).exclude(pk=user.pk).exists(), '此证件已绑定其他账号')
     user.identity_digest = digest

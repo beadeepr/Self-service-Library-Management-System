@@ -40,6 +40,9 @@ const transactionKey = ref('')
 
 onMounted(async () => {
   void ensureLoaded().catch(() => undefined)
+  // 直接刷新本页时 Pinia 里可能还没有读者资料：补加载后离线入队才有 reader，
+  // 借期提示也才能按实名状态取正确档位。
+  void reader.load().catch(() => undefined)
   try {
     rules.value = await fetchRules()
   } catch {

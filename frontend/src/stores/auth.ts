@@ -5,21 +5,33 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import * as authApi from '@/api/auth'
-import { clearSession, getAccessToken, getRefreshToken, getStoredRole, saveSession, type Role } from '@/api/session'
+import {
+  clearSession,
+  getAccessToken,
+  getRefreshToken,
+  getStoredRole,
+  getStoredSuperuser,
+  saveSession,
+  type Role,
+} from '@/api/session'
 
 export const useAuthStore = defineStore('auth', () => {
   const access = ref<string | null>(getAccessToken())
   const role = ref<Role | null>(getStoredRole())
+  const isSuperuser = ref(getStoredSuperuser())
 
   const isAuthenticated = computed(() => !!access.value)
   const isReader = computed(() => role.value === 'reader')
   const isAdmin = computed(() => role.value === 'admin')
   const isOperator = computed(() => role.value === 'operator')
+  /** 后端把 is_superuser 视为管理员与运维权限的并集。 */
+  const canOperateDevices = computed(() => isOperator.value || isSuperuser.value)
 
-  function applySession(payload: { access: string; refresh?: string; role?: Role }): void {
+  function applySession(payload: { access: string; refresh?: string; role?: Role; is_superuser?: boolean }): void {
     saveSession(payload)
     access.value = payload.access
     if (payload.role) role.value = payload.role
+    if (payload.is_superuser !== undefined) isSuperuser.value = payload.is_superuser
   }
 
   async function login(phone: string, password: string): Promise<void> {
@@ -31,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /** 扫码登录与自助终端读者签到拿到令牌后，统一从这里写入登录态。 */
-  function adoptSession(payload: { access: string; refresh?: string; role?: Role }): void {
+  function adoptSession(payload: { access: string; refresh?: string; role?: Role; is_superuser?: boolean }): void {
     applySession(payload)
   }
 
@@ -40,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession()
     access.value = null
     role.value = null
+    isSuperuser.value = false
   }
 
   async function logout(): Promise<void> {
@@ -56,9 +69,12 @@ export const useAuthStore = defineStore('auth', () => {
     return !!role.value && roles.includes(role.value)
   }
 
-  /** 角色默认落点：读者回读者端，管理员与运维共用管理后台。 */
+  /**
+   * 角色默认落点：管理员与运维进管理后台，其余（含角色缺失的旧会话）回读者端。
+   * 角色缺失时若落到 /admin/dashboard，路由守卫会反复重定向到自身，形成死循环。
+   */
   function homePath(): string {
-    return role.value === 'reader' ? '/reader/home' : '/admin/dashboard'
+    return role.value === 'admin' || role.value === 'operator' ? '/admin/dashboard' : '/reader/home'
   }
 
   return {
@@ -68,6 +84,8 @@ export const useAuthStore = defineStore('auth', () => {
     isReader,
     isAdmin,
     isOperator,
+    isSuperuser,
+    canOperateDevices,
     login,
     loginBySms,
     adoptSession,

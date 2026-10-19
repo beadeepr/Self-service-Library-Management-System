@@ -14,7 +14,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { errorMessage, newIdempotencyKey } from '@/api/client'
 import { COPY_STATUS_LABEL, fetchBook, fetchCopy, searchCopies, type Book, type Copy } from '@/api/books'
-import { fetchRules, listLoans, returnLoan, type Loan, type LoanRules, type ReturnResult } from '@/api/circulation'
+import { fetchRules, lookupActiveLoan, returnLoan, type ActiveLoan, type LoanRules, type ReturnResult } from '@/api/circulation'
 import { useCatalog } from '@/composables/useCatalog'
 import { isNetworkFailure, useOfflineQueue } from '@/composables/useOfflineQueue'
 import { useReaderStore } from '@/stores/reader'
@@ -31,7 +31,7 @@ const step = ref<Step>('scan')
 const rfidInput = ref('')
 const copy = ref<Copy | null>(null)
 const book = ref<Book | null>(null)
-const loan = ref<Loan | null>(null)
+const loan = ref<ActiveLoan | null>(null)
 const result = ref<ReturnResult | null>(null)
 const rules = ref<LoanRules | null>(null)
 const returnBranch = ref<number | null>(null)
@@ -86,8 +86,8 @@ async function resolveCopy(raw: string): Promise<void> {
       return
     }
 
-    const openLoans = await listLoans({ copy: located.id, 'returned_at__isnull': true })
-    const active = openLoans.results[0]
+    // 自助还书允许替他人归还，因此不能走只返回本人借阅的列表接口。
+    const active = await lookupActiveLoan(located.id).catch(() => null)
     if (!active) {
       ElMessage.error('该图书当前没有在借记录，无需归还')
       return
@@ -142,6 +142,7 @@ async function confirmReturn(): Promise<void> {
         kind: 'return',
         loan: loan.value.id,
         branch: returnBranch.value,
+        damaged: damaged.value,
       })
       resetTransaction()
     } else {

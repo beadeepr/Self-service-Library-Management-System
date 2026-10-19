@@ -35,6 +35,14 @@ export interface RenewResult {
   renewals: number
 }
 
+/** 自助还书只需要借阅编号与应还时间，不暴露借阅人信息。 */
+export interface ActiveLoan {
+  id: number
+  copy: number
+  borrowed_at: string
+  due_at: string
+}
+
 export interface ReturnResult {
   id: number
   /** 归还后通常进入 processing，需消毒上架后才可再次外借 */
@@ -91,6 +99,14 @@ export function listLoans(query: LoanQuery = {}): Promise<Page<Loan>> {
 
 export function fetchLoan(id: number | string): Promise<Loan> {
   return get<Loan>(`/loans/${id}/`)
+}
+
+/**
+ * 按副本查当前未归还的借阅，供自助还书使用。
+ * 与列表接口不同，它不按借阅人过滤，因此可以替他人归还。
+ */
+export function lookupActiveLoan(copy: number | string): Promise<ActiveLoan> {
+  return get<ActiveLoan>('/loans/lookup/', { params: { copy } })
 }
 
 /** 借书。读者本人借阅不需要传 reader，仅管理员代借时才指定。 */

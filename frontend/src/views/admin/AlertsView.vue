@@ -11,12 +11,10 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { errorMessage } from '@/api/client'
+import { errorMessage, getAll } from '@/api/client'
 import {
   ALERT_SEVERITY_LABEL,
   ALERT_STATUS_LABEL,
-  listAlerts,
-  listDevices,
   transitionAlert,
   type Alert,
   type AlertSeverity,
@@ -47,12 +45,14 @@ const criticalCount = computed(() => alerts.value.filter((item) => item.severity
 async function load(): Promise<void> {
   loading.value = true
   try {
-    const [alertPage, devicePage] = await Promise.all([
-      listAlerts(statusFilter.value ? { status: statusFilter.value } : {}),
-      listDevices(),
+    // 告警与设备都要取全部页：只取前 20 条会漏掉旧的未处理告警和离线设备，
+    // 顶部“待处理/在线”的统计也会失真。
+    const [allAlerts, allDevices] = await Promise.all([
+      getAll<Alert>('/alerts/', statusFilter.value ? { status: statusFilter.value } : {}),
+      getAll<Device>('/devices/'),
     ])
-    alerts.value = alertPage.results
-    devices.value = devicePage.results
+    alerts.value = allAlerts
+    devices.value = allDevices
   } catch (error) {
     alerts.value = []
     ElMessage.error(errorMessage(error, '告警加载失败'))

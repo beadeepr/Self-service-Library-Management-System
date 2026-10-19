@@ -8,14 +8,11 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { errorMessage, newIdempotencyKey } from '@/api/client'
+import { errorMessage, getAll, newIdempotencyKey } from '@/api/client'
 import {
   DEVICE_COMMAND_LABEL,
   DEVICE_EVENT_LABEL,
   DEVICE_KIND_LABEL,
-  listDeviceCommands,
-  listDeviceEvents,
-  listDevices,
   sendDeviceCommand,
   type Device,
   type DeviceCommand,
@@ -25,8 +22,10 @@ import {
   type DeviceKind,
 } from '@/api/iot'
 import { useCatalog } from '@/composables/useCatalog'
+import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/format'
 
+const auth = useAuthStore()
 const { branchName, ensureLoaded } = useCatalog()
 
 const devices = ref<Device[]>([])
@@ -46,14 +45,14 @@ const onlineCount = computed(() => devices.value.filter((item) => item.online).l
 async function load(): Promise<void> {
   loading.value = true
   try {
-    const [devicePage, eventPage, commandPage] = await Promise.all([
-      listDevices(),
-      listDeviceEvents(),
-      listDeviceCommands(),
+    const [allDevices, allEvents, allCommands] = await Promise.all([
+      getAll<Device>('/devices/'),
+      getAll<DeviceEvent>('/device-events/'),
+      getAll<DeviceCommand>('/device-commands/'),
     ])
-    devices.value = devicePage.results
-    events.value = eventPage.results
-    commands.value = commandPage.results
+    devices.value = allDevices
+    events.value = allEvents
+    commands.value = allCommands
   } catch (error) {
     devices.value = []
     events.value = []
@@ -154,7 +153,8 @@ async function sendCommand(device: Device, command: DeviceCommandName): Promise<
             <span class="shadow">{{ shadowText(row.shadow) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="远程指令" width="150" align="right">
+        <!-- 后端 devices 写操作仅运维或超级管理员；普通 admin 只读，不能显示必然 403 的按钮。 -->
+        <el-table-column v-if="auth.canOperateDevices" label="远程指令" width="150" align="right">
           <template #default="{ row }">
             <el-popover placement="left" width="220" trigger="click" @show="openCommand(row)">
               <template #reference>

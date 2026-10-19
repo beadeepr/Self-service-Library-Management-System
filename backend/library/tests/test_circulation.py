@@ -53,7 +53,27 @@ class CirculationContractTests(TestCase):
         self.assertEqual(self.post('renew', {'loan': loan}, 'renew-other').status_code, 404)
         self.assertEqual(self.post('return', {'loan': loan, 'branch': self.branch.pk}, 'return-other').status_code, 404)
         self.assertEqual(self.client.get('/api/circulation/loans/').data['count'], 0)
-        self.assertEqual(self.client.post('/api/offline/sync/', {'transactions': []}, format='json').status_code, 403)
+        # 读者可以补传自己的离线交易；空批次属于参数校验错误，不再是权限错误。
+        self.assertEqual(self.client.post('/api/offline/sync/', {'transactions': []}, format='json').status_code, 400)
+
+    def test_reader_can_sync_own_offline_transaction(self):
+        import uuid
+        self.client.force_authenticate(self.other)
+        body = {'transactions': [{'event_id': str(uuid.uuid4()), 'kind': 'borrow',
+            'copy': self.copy.pk, 'occurred_at': (timezone.now()-timedelta(minutes=5)).isoformat()}]}
+        response = self.client.post('/api/v1/offline/sync/', body, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['results'][0]['status'], 'applied')
+        self.assertEqual(m.Loan.objects.get().reader_id, self.other.pk)
+
+    def test_reader_cannot_sync_offline_for_another_reader(self):
+        import uuid
+        self.client.force_authenticate(self.other)
+        body = {'transactions': [{'event_id': str(uuid.uuid4()), 'kind': 'borrow', 'reader': self.reader.pk,
+            'copy': self.copy.pk, 'occurred_at': (timezone.now()-timedelta(minutes=5)).isoformat()}]}
+        response = self.client.post('/api/v1/offline/sync/', body, format='json')
+        self.assertEqual(response.data['results'][0]['status'], 'conflict')
+        self.assertFalse(m.Loan.objects.exists())
 
     def test_invalid_input_and_missing_idempotency_key(self):
         self.assertEqual(self.post('return', {'branch': self.branch.pk}, 'missing-loan').status_code, 400)

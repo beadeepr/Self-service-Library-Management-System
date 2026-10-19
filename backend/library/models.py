@@ -119,6 +119,8 @@ class Rule(Record):
     disinfection_required = models.BooleanField(default=True)
     shelving_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1)])
     offline_minutes = models.PositiveIntegerField(default=5, validators=[MinValueValidator(1)])
+    # 未扫码出馆的访问记录超过该时长后自动收尾，避免在馆人数永久虚高。
+    visit_max_hours = models.PositiveIntegerField(default=12, validators=[MinValueValidator(1)])
     response_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1)])
     retention_days = models.PositiveIntegerField(default=180, validators=[MinValueValidator(1)])
     financial_retention_days = models.PositiveIntegerField(default=1825, validators=[MinValueValidator(1)])

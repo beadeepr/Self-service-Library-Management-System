@@ -14,6 +14,7 @@ export type Role = 'reader' | 'admin' | 'operator'
 const ACCESS_KEY = 'library.access'
 const REFRESH_KEY = 'library.refresh'
 const ROLE_KEY = 'library.role'
+const SUPERUSER_KEY = 'library.superuser'
 
 function read(key: string): string | null {
   try {
@@ -52,18 +53,25 @@ export function getStoredRole(): Role | null {
   return role === 'reader' || role === 'admin' || role === 'operator' ? role : null
 }
 
+export function getStoredSuperuser(): boolean {
+  return read(SUPERUSER_KEY) === '1'
+}
+
 /**
  * 保存令牌。刷新接口开启了轮换（ROTATE_REFRESH_TOKENS），
  * 响应会同时返回新的 refresh，必须覆盖旧值，否则旧令牌已进黑名单。
  */
-export function saveSession(input: { access: string; refresh?: string; role?: Role }): void {
+export function saveSession(input: { access: string; refresh?: string; role?: Role; is_superuser?: boolean }): void {
   write(ACCESS_KEY, input.access)
   if (input.refresh) write(REFRESH_KEY, input.refresh)
   if (input.role) write(ROLE_KEY, input.role)
+  // 刷新令牌的响应不含角色信息，不能把已有标记覆盖掉。
+  if (input.is_superuser !== undefined) write(SUPERUSER_KEY, input.is_superuser ? '1' : '0')
 }
 
 export function clearSession(): void {
   drop(ACCESS_KEY)
   drop(REFRESH_KEY)
   drop(ROLE_KEY)
+  drop(SUPERUSER_KEY)
 }

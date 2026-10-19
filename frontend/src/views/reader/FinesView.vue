@@ -13,10 +13,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { errorMessage, newIdempotencyKey } from '@/api/client'
-import { isSettled, listFines, createPayment, simulatePayment, unpaidAmount, type Fine } from '@/api/fines'
+import { errorMessage, getAll, newIdempotencyKey } from '@/api/client'
+import { isSettled, createPayment, simulatePayment, unpaidAmount, type Fine } from '@/api/fines'
 import { fetchLoan, type Loan } from '@/api/circulation'
-import { listDepositEntries, type DepositEntry } from '@/api/readers'
+import type { DepositEntry } from '@/api/readers'
 import { useCatalog } from '@/composables/useCatalog'
 import { formatDateTime, formatMoney } from '@/utils/format'
 
@@ -44,11 +44,15 @@ const totalUnpaid = computed(() => unpaidRows.value.reduce((sum, row) => sum + u
 async function load(): Promise<void> {
   loading.value = true
   try {
-    const [finePage, depositPage] = await Promise.all([listFines(), listDepositEntries()])
+    // 未缴罚款会阻止借书，必须取全部页；只取第一页会让旧欠款“看不见但仍拦截”。
+    const [fines, depositEntries] = await Promise.all([
+      getAll<Fine>('/fines/'),
+      getAll<DepositEntry>('/deposit-entries/'),
+    ])
     // 罚款只带 loan 外键，需按编号逐条取回借阅记录，才能显示书名与应还日期。
-    const loans = await Promise.all(finePage.results.map((fine) => fetchLoan(fine.loan).catch(() => null)))
-    rows.value = finePage.results.map((fine, index) => ({ fine, loan: loans[index] }))
-    deposits.value = depositPage.results
+    const loans = await Promise.all(fines.map((fine) => fetchLoan(fine.loan).catch(() => null)))
+    rows.value = fines.map((fine, index) => ({ fine, loan: loans[index] }))
+    deposits.value = depositEntries
   } catch (error) {
     rows.value = []
     deposits.value = []

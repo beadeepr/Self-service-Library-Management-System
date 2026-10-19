@@ -12,7 +12,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { errorMessage, newIdempotencyKey } from '@/api/client'
+import { errorMessage, getAll, newIdempotencyKey } from '@/api/client'
 import {
   COPY_STATUS_LABEL,
   createBook,
@@ -20,7 +20,6 @@ import {
   disinfectCopy,
   intakeCopies,
   searchBooks,
-  searchCopies,
   setCopyStatus,
   shelveCopy,
   updateBook,
@@ -233,8 +232,8 @@ async function openCopies(book: Book): Promise<void> {
   copiesVisible.value = true
   copiesLoading.value = true
   try {
-    const data = await searchCopies({ book: book.id })
-    copies.value = data.results
+    // 副本可能超过一页，取全部才能处理第 21 册之后的消毒/上架/状态变更。
+    copies.value = await getAll<Copy>('/copies/', { book: book.id })
   } catch (error) {
     copies.value = []
     ElMessage.error(errorMessage(error, '副本加载失败'))
@@ -290,6 +289,11 @@ async function handleSetStatus(copy: Copy, status: 'withdrawn' | 'lost' | 'proce
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(errorMessage(error, '状态变更失败'))
   }
+}
+
+/** 借出、预约保留、配送中的副本必须先结束流程，后端才允许改状态。 */
+function canChangeCopyStatus(status: CopyStatus): boolean {
+  return status !== 'loaned' && status !== 'reserved' && status !== 'transit'
 }
 
 function statusTagType(status: CopyStatus): 'success' | 'info' | 'warning' | 'danger' {
@@ -472,7 +476,7 @@ function statusTagType(status: CopyStatus): 'success' | 'info' | 'warning' | 'da
             <el-button v-if="row.status === 'processing'" text type="primary" size="small" @click="handleShelve(row)">
               上架
             </el-button>
-            <template v-if="auth.isAdmin">
+            <template v-if="auth.isAdmin && canChangeCopyStatus(row.status)">
               <el-button
                 v-if="row.status !== 'processing'"
                 text

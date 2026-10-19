@@ -20,7 +20,7 @@ import {
   type CreditEntry,
   type DepositEntry,
 } from '@/api/readers'
-import { recordConsent } from '@/api/content'
+import { listConsents, recordConsent } from '@/api/content'
 import { useAuthStore } from '@/stores/auth'
 import { useReaderStore } from '@/stores/reader'
 import { isPhone, passwordProblem } from '@/utils/validators'
@@ -41,13 +41,44 @@ const loading = ref(false)
 onMounted(async () => {
   loading.value = true
   try {
-    await reader.load(true)
+    await Promise.all([reader.load(true), loadBiometricConsent()])
   } catch (error) {
     ElMessage.error(errorMessage(error, '个人资料加载失败'))
   } finally {
     loading.value = false
   }
 })
+
+/* ---------------- 人脸识别单独同意 ---------------- */
+
+const biometricConsent = ref<boolean | null>(null)
+const savingConsent = ref(false)
+
+async function loadBiometricConsent(): Promise<void> {
+  try {
+    const page = await listConsents()
+    const latest = page.results
+      .filter((item) => item.purpose === 'biometric')
+      .sort((left, right) => right.id - left.id)[0]
+    biometricConsent.value = latest?.granted ?? false
+  } catch {
+    // 同意记录属于隐私数据，读取失败时不臆测状态。
+    biometricConsent.value = null
+  }
+}
+
+async function setBiometricConsent(granted: boolean): Promise<void> {
+  savingConsent.value = true
+  try {
+    await recordConsent({ purpose: 'biometric', granted, policy_version: POLICY_VERSION })
+    biometricConsent.value = granted
+    ElMessage.success(granted ? '已同意人脸识别，门禁刷脸方式可用' : '已撤回人脸识别同意')
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '同意状态更新失败'))
+  } finally {
+    savingConsent.value = false
+  }
+}
 
 const creditLevelText = computed(() => {
   const level = profile.value?.credit_level
@@ -327,6 +358,29 @@ watch(activeTab, (tab) => {
                 <el-button type="primary" :loading="changingPhone" @click="submitPhone">更换手机号</el-button>
               </el-form>
             </section>
+
+            <el-divider />
+
+            <section class="security__block">
+              <h3 class="security__title">人脸识别单独同意</h3>
+              <p class="lib-text-muted">
+                门禁刷脸属于生物识别信息，按需求须单独告知并单独取得同意，可随时撤回。
+                演示环境不采集人脸上传，仅记录同意状态。
+              </p>
+              <div class="consent-row">
+                <el-tag :type="biometricConsent ? 'success' : 'info'" effect="plain">
+                  {{ biometricConsent === null ? '状态未知' : biometricConsent ? '已同意' : '未同意' }}
+                </el-tag>
+                <el-button
+                  :type="biometricConsent ? 'danger' : 'primary'"
+                  :loading="savingConsent"
+                  :disabled="biometricConsent === null"
+                  @click="setBiometricConsent(!biometricConsent)"
+                >
+                  {{ biometricConsent ? '撤回同意' : '同意人脸识别' }}
+                </el-button>
+              </div>
+            </section>
           </div>
         </el-tab-pane>
 
@@ -404,5 +458,12 @@ watch(activeTab, (tab) => {
 
 .finance-title {
   margin-top: 24px;
+}
+
+.consent-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
 }
 </style>

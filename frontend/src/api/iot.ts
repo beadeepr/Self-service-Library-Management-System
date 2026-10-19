@@ -199,7 +199,8 @@ export interface ReportSummary {
   visits_trend: { day?: string; count?: number }[]
   devices_total: number
   devices_online: number
-  device_events: { kind?: string; count?: number }[]
+  /** 后端按 device_id 聚合，不是按事件类型 */
+  device_events: { device_id: number; count: number }[]
   open_alerts: number
   fine_income: string | number
   deposit_balance: string | number
@@ -207,7 +208,8 @@ export interface ReportSummary {
   late_shelving: number
   overdue_workorders: number
   workorders_on_time: number
-  annual_costs: { kind?: string; amount?: string; total?: string; count?: number }[]
+  /** 后端按年份与网点聚合 */
+  annual_costs: { occurred_on__year: number; branch_id: number; total: string | number }[]
   labor_hours: string | number
 }
 

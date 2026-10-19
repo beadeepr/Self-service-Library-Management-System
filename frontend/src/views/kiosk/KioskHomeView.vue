@@ -41,6 +41,8 @@ const smsForm = reactive({ phone: '', code: '' })
 const rules = ref<LoanRules | null>(null)
 const activeLoanCount = ref(0)
 const contextLoading = ref(false)
+/** 已成功补传的条目保留在本地供查看，但不应再计入“待补传”数量。 */
+const pendingOfflineCount = computed(() => offlineItems.value.filter((item) => item.sync !== 'applied').length)
 
 /** 签到后展示「已借 N 册 / 上限 M 册」，让读者进功能前就知道还能不能借。 */
 const quotaText = computed(() => {
@@ -209,7 +211,7 @@ async function finish(): Promise<void> {
         <template #header>
           <div class="offline__head">
             <span>本机离线队列</span>
-            <el-tag type="warning" effect="plain">{{ offlineItems.length }} 笔待补传</el-tag>
+            <el-tag type="warning" effect="plain">{{ pendingOfflineCount }} 笔待补传</el-tag>
           </div>
         </template>
 
@@ -226,7 +228,7 @@ async function finish(): Promise<void> {
         </ul>
 
         <div class="offline__actions">
-          <button class="kiosk-btn" type="button" :disabled="syncing" @click="syncOffline">
+          <button class="kiosk-btn" type="button" :disabled="syncing" @click="syncOffline(false)">
             {{ syncing ? '补传中…' : '尝试补传' }}
           </button>
           <button class="kiosk-btn kiosk-btn--ghost" type="button" :disabled="clearing" @click="clearOffline">清空</button>
@@ -234,8 +236,7 @@ async function finish(): Promise<void> {
 
         <p class="kiosk-hint">
           补传会由服务端重新校验库存与读者资格，冲突不会被覆盖。
-          注意：后端补传接口仅管理员可用，以读者身份登录的终端补传会被拒绝 ——
-          这里演示的是本机队列与幂等去重机制，真实离线借还还需终端侧的离线身份凭证。
+          网络恢复后会自动尝试补传；离线登录授权凭证仍属客户端能力，本演示未包含。
         </p>
       </el-card>
     </div>

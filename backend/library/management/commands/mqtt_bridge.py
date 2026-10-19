@@ -1,11 +1,23 @@
 import logging
 import time
 from django.core.management.base import BaseCommand
-from django.db import close_old_connections, DatabaseError
+from django.db import close_old_connections, connection, DatabaseError
 from library.adapters import mqtt_client, connect
 from library.services.mqtt import record_message, process_message
 
 logger = logging.getLogger(__name__)
+
+
+def reset_connections():
+    """Recycle stale DB connections without closing one owned by an atomic block.
+
+    The MQTT callback normally runs with autocommit enabled. Django's test
+    runner, however, executes it inside a TestCase atomic block; closing the
+    connection there marks the transaction for rollback and breaks every
+    subsequent query in the test.
+    """
+    if not connection.in_atomic_block:
+        close_old_connections()
 
 
 class Command(BaseCommand):
@@ -22,7 +34,7 @@ class Command(BaseCommand):
                     client.subscribe(f'library/+/device/+/{suffix}', qos=1)
 
         def on_message(client, userdata, message):
-            close_old_connections()
+            reset_connections()
             try:
                 # record_message commits its transaction before ACK. A failed commit
                 # propagates out of the callback and reconnects the persistent session.
@@ -33,7 +45,7 @@ class Command(BaseCommand):
                 except Exception:
                     logger.exception('MQTT 消息已持久化，等待后台重试：%s', row.pk)
             finally:
-                close_old_connections()
+                reset_connections()
 
         client.on_connect = on_connect
         client.on_message = on_message

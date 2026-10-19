@@ -23,7 +23,10 @@ def validate_secret(password, user=None):
 def tokens(user):
     require(user.is_active and not user.frozen, '账号已冻结或停用')
     refresh = RefreshToken.for_user(user)
-    return {'access': str(refresh.access_token), 'refresh': str(refresh), 'role': user.role}
+    # 超级管理员在后端拥有管理员权限，返回有效角色，避免前端按其默认 reader 角色拦截。
+    role = 'admin' if user.is_superuser else user.role
+    return {'access': str(refresh.access_token), 'refresh': str(refresh), 'role': role,
+            'is_superuser': user.is_superuser}
 
 
 def issue_code(phone, purpose):

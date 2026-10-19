@@ -27,8 +27,8 @@ function widthOf(value: number): string {
 <template>
   <ul class="viz-rows">
     <li
-      v-for="item in items"
-      :key="item.label"
+      v-for="(item, index) in items"
+      :key="`${index}-${item.label}`"
       class="viz-rows__row"
       :title="`${item.label}：${item.value}${unit ?? ''}`"
     >

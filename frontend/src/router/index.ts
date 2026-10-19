@@ -152,6 +152,12 @@ router.beforeEach((to) => {
     return { name: 'reader-login', query: redirect ? { redirect } : {}, replace: true }
   }
 
+  if (requiredRoles && !auth.role) {
+    // 有令牌但没有角色（旧会话或存储被局部清理）：令牌无法判断权限，强制重新登录。
+    auth.forget()
+    return { name: 'reader-login', query: { redirect: to.fullPath }, replace: true }
+  }
+
   if (requiredRoles && !auth.hasRole(...requiredRoles)) {
     return { path: auth.homePath(), replace: true }
   }

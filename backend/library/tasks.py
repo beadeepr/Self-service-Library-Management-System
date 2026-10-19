@@ -34,6 +34,15 @@ def maintenance():
                 assess_fine(loan)
             notify(loan.reader, '图书逾期' if overdue else '图书即将到期', f'借阅 {pk} 应于 {loan.due_at.isoformat()} 归还',
                 f'loan:{pk}:{"overdue" if overdue else "due"}:{now.date()}')
+    # 未扫码出馆的记录超过上限后自动收尾，保证在馆人数与再次入馆判断可靠。
+    visit_cutoff = now-timedelta(hours=rules().visit_max_hours)
+    for pk in Visit.objects.filter(exited_at=None, entered_at__lt=visit_cutoff).values_list('pk', flat=True):
+        with transaction.atomic():
+            visit = Visit.objects.select_for_update().get(pk=pk)
+            if visit.exited_at is None and visit.entered_at < visit_cutoff:
+                visit.exited_at = now
+                visit.active_reader = None
+                visit.save(update_fields=['exited_at', 'active_reader', 'updated_at'])
     cutoff = now-timedelta(minutes=rules().offline_minutes)
     for pk in Device.objects.filter(online=True, last_seen__lt=cutoff).values_list('pk', flat=True):
         with transaction.atomic():

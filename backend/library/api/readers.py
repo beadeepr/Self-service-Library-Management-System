@@ -71,6 +71,8 @@ class ReaderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.G
         def execute():
             user = get_object_or_404(m.User.objects.select_for_update(), pk=pk)
             require(not user.is_superuser or request.user.is_superuser, '只有超级管理员可修改超级管理员')
+            # 普通管理员只能管理读者，不能改密、冻结或调账同级管理员/运维账号。
+            require(user.role == 'reader' or request.user.is_superuser, '普通管理员只能管理读者账号')
             if 'role' in data:
                 require(request.user.is_superuser, '只有超级管理员可授予或调整角色')
                 user.role = data['role']

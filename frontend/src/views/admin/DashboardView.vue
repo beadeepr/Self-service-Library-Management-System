@@ -18,13 +18,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { errorMessage, getAll } from '@/api/client'
 import { COPY_STATUS_LABEL, fetchBranchOccupancy, type CopyStatus } from '@/api/books'
-import {
-  DEVICE_EVENT_LABEL,
-  exportReportCsv,
-  fetchReportSummary,
-  type DeviceEventKind,
-  type ReportSummary,
-} from '@/api/iot'
+import { exportReportCsv, fetchReportSummary, type Device, type ReportSummary } from '@/api/iot'
 import type { UserProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useCatalog } from '@/composables/useCatalog'
@@ -33,11 +27,12 @@ import VizBarList from '@/components/VizBarList.vue'
 import VizColumnChart from '@/components/VizColumnChart.vue'
 
 const auth = useAuthStore()
-const { branches, ensureLoaded } = useCatalog()
+const { branches, branchName, ensureLoaded } = useCatalog()
 
 const summary = ref<ReportSummary | null>(null)
 const occupancyByBranch = ref<{ label: string; value: number }[]>([])
 const readerNames = ref<Map<number, string>>(new Map())
+const deviceNames = ref<Map<number, string>>(new Map())
 const loading = ref(false)
 const exporting = ref(false)
 
@@ -92,15 +87,15 @@ const visitsTrend = computed(() =>
 
 const deviceEventRows = computed(() =>
   (summary.value?.device_events ?? []).map((item) => ({
-    label: DEVICE_EVENT_LABEL[item.kind as DeviceEventKind] ?? item.kind ?? '未分类',
+    label: deviceNames.value.get(item.device_id) ?? `设备 ${item.device_id}`,
     value: item.count ?? 0,
   })),
 )
 
 const costRows = computed(() =>
   (summary.value?.annual_costs ?? []).map((item) => ({
-    label: item.kind ?? '其他',
-    value: Number(item.amount ?? item.total ?? 0),
+    label: `${item.occurred_on__year} · ${branchName(item.branch_id)}`,
+    value: Number(item.total ?? 0),
   })),
 )
 
@@ -129,7 +124,8 @@ async function load(): Promise<void> {
 }
 
 onMounted(async () => {
-  void ensureLoaded().catch(() => undefined)
+  // 必须等网点加载完再取各馆在馆人数，否则首次打开时分支机构列表为空。
+  await ensureLoaded().catch(() => undefined)
   // 读者活跃排行只带 reader_id，取读者列表换成可辨识的姓名。
   // readers/ 是 AdminOnly，运维会 403，此时退回显示「读者 N」。
   try {
@@ -137,6 +133,13 @@ onMounted(async () => {
     readerNames.value = new Map(readers.map((item) => [item.id, item.first_name || item.phone]))
   } catch {
     readerNames.value = new Map()
+  }
+  // 设备事件按 device_id 聚合，取设备台账换成设备名。
+  try {
+    const devices = await getAll<Device>('/devices/')
+    deviceNames.value = new Map(devices.map((item) => [item.id, item.name]))
+  } catch {
+    deviceNames.value = new Map()
   }
   await load()
 })

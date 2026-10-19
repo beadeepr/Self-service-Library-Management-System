@@ -6,7 +6,7 @@ from django.utils import timezone
 from library.models import (Alert, Book, Branch, Consent, Copy, Device, DeviceCommand,
     DeviceEvent, Inventory, Transfer, User, Visit, WorkOrder)
 from .common import audit, require, rules, owner_or_admin
-from .circulation import notify
+from .circulation import assign_hold, notify
 from library.events import emit
 
 
@@ -25,11 +25,14 @@ def queue_command(actor, device, value, reason):
 
 
 def raise_alert(branch, kind, message, severity='warning', device=None):
+    message = str(message)
     alert = Alert.objects.create(branch=branch, device=device, kind=kind, message=message, severity=severity)
     for user in User.objects.filter(role__in=['admin', 'operator'], is_active=True):
         notify(user, f'设备/安全告警：{kind}', message)
     if device and kind in ['offline', 'fault', 'smoke']:
-        WorkOrder.objects.create(branch=branch, device=device, kind='technical', title=message,
+        # WorkOrder.title 只有 200 字符；设备上报的长文案必须截断，
+        # 否则 MySQL 严格模式会抛 DataError，MQTT 收件会变成永久重试的毒消息。
+        WorkOrder.objects.create(branch=branch, device=device, kind='technical', title=message[:200],
             due_at=timezone.now()+timedelta(hours=rules().response_hours))
     return alert
 
@@ -101,6 +104,14 @@ def access(actor, reader_id, branch_id, direction, method):
     else:
         require(branch.active, '网点暂未开放')
         require(reader.is_active and not reader.frozen and reader.credit >= rules().minimum_credit, '账号状态或信用不满足入馆条件')
+        # 无人值守场景下读者经常忘记扫码出馆。超过上限的在馆记录自动收尾，
+        # 否则人数会永久虚高，而且该读者会被“请勿重复入馆”永久拦住。
+        stale_cutoff = timezone.now() - timedelta(hours=rules().visit_max_hours)
+        if visit and visit.entered_at <= stale_cutoff:
+            visit.exited_at = timezone.now()
+            visit.active_reader = None
+            visit.save()
+            visit = None
         require(not visit, '请勿重复入馆')
         if method == 'face':
             consent = Consent.objects.filter(reader=reader, purpose='biometric').order_by('-id').first()
@@ -112,6 +123,10 @@ def access(actor, reader_id, branch_id, direction, method):
         require(opened, '当前不在开放时间内')
         require(Visit.objects.filter(branch=branch, exited_at=None).count() < branch.capacity, '当前在馆人数已达上限')
         visit = Visit.objects.create(reader=reader, active_reader=reader, branch=branch, entered_at=timezone.now())
+    # 身份校验通过后联动门禁开门。模拟环境只登记并签名指令，不代表真实硬件已执行。
+    gate = Device.objects.filter(branch=branch, kind='gate').order_by('id').first()
+    if gate:
+        queue_command(actor, gate, 'unlock', f'读者 {reader.pk} {"进馆" if direction == "enter" else "出馆"}核验通过')
     audit(actor, f'access.{direction}', visit, method=method)
     return {'id': visit.pk, 'direction': direction, 'occupancy': Visit.objects.filter(branch=branch, exited_at=None).count()}
 
@@ -147,6 +162,8 @@ def transition_transfer(actor, pk, action, destination_id=None):
     elif action == 'cancel':
         require(item.status == 'planned', '在途任务请先退回验收')
         item.status, copy.status = 'cancelled', 'available'
+        # 取消调拨后副本重新可借，必须优先满足该馆的等待预约。
+        assign_hold(copy)
     elif action in ['redirect', 'return']:
         require(item.status in ['planned', 'shipped'], '已完成任务不可改派')
         item.destination = item.source if action == 'return' else get_object_or_404(Branch, pk=destination_id, active=True)

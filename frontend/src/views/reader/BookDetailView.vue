@@ -9,8 +9,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { COPY_STATUS_LABEL, fetchBook, searchCopies, type Book, type Copy } from '@/api/books'
-import { errorMessage, newIdempotencyKey } from '@/api/client'
+import { COPY_STATUS_LABEL, fetchBook, type Book, type Copy } from '@/api/books'
+import { errorMessage, getAll, newIdempotencyKey } from '@/api/client'
 import { createReservation } from '@/api/reservations'
 import { useAuthStore } from '@/stores/auth'
 import { useCatalog } from '@/composables/useCatalog'
@@ -65,7 +65,15 @@ const groups = computed<BranchGroup[]>(() => {
  * 因为后端就是按选定取书馆的借出/可借情况判定能否预约的，
  * 把没有副本或还有可借副本的网点列出来只会让读者点了被拒。
  */
-const reservableBranches = computed(() => groups.value.filter((group) => group.total > 0 && group.available === 0))
+const reservableBranches = computed(() =>
+  groups.value.filter(
+    (group) =>
+      group.total > 0 &&
+      group.available === 0 &&
+      // 与后端一致：借出 / 预约保留 / 待处理 / 配送中都算“不可借”，可排队预约。
+      group.items.some((item) => !['available', 'withdrawn', 'lost'].includes(item.status)),
+  ),
+)
 
 /** 后端给出的 can_reserve 已经综合了在架与库存，前端只补登录态判断。 */
 const canReserve = computed(() => !!book.value?.can_reserve && reservableBranches.value.length > 0)
@@ -74,7 +82,7 @@ const reserveHint = computed(() => {
   if (!book.value) return ''
   if (!book.value.active) return '该图书已下架，不可预约'
   if (book.value.available_count > 0) return '当前有可借副本，无需预约'
-  if (!reservableBranches.value.length) return '该书副本正在处理中，暂不可预约'
+  if (!reservableBranches.value.length) return '当前没有可预约的取书网点'
   if (!auth.isAuthenticated) return '登录后可预约'
   return ''
 })
@@ -114,9 +122,13 @@ async function submitReserve(): Promise<void> {
 async function load(id: string): Promise<void> {
   loading.value = true
   try {
-    const [detail, copyPage] = await Promise.all([fetchBook(id), searchCopies({ book: Number(id) })])
+    // 馆藏可能超过一页；取全部副本才能正确判断各馆可借数与可预约网点。
+    const [detail, allCopies] = await Promise.all([
+      fetchBook(id),
+      getAll<Copy>('/copies/', { book: Number(id) }),
+    ])
     book.value = detail
-    copies.value = copyPage.results
+    copies.value = allCopies
   } catch (error) {
     book.value = null
     copies.value = []
